@@ -79,7 +79,17 @@ export function createConfigModuleMock(loadConfig: MockFunction) {
 }
 
 export function createProvidersRegistryModuleMock(getProviders: MockFunction) {
-  return { getProviders };
+  return {
+    getProviders,
+    getOrderedProviders: (config: { enabledProviders: unknown; providerOrder: unknown }) => {
+      const all = getProviders() as Array<{ id: string }>;
+      if (!config || config.enabledProviders === "auto") return all;
+      const enabled = new Set(
+        Array.isArray(config.enabledProviders) ? config.enabledProviders : [],
+      );
+      return all.filter((p) => enabled.has(p.id));
+    },
+  };
 }
 
 export function createPricingModuleMock(mocks: PricingMocks) {

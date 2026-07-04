@@ -50,7 +50,7 @@ describe("package manifest compatibility", () => {
       types: "./dist/index.d.ts",
     });
     expect(pkg.exports?.["./tui"]).toEqual({
-      default: "./dist/tui.tsx",
+      default: "./dist/tui.js",
       types: "./dist/tui.d.ts",
     });
   });

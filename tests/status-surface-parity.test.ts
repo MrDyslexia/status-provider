@@ -29,6 +29,13 @@ vi.mock("@opencode-ai/plugin", () => {
 
 vi.mock("../src/providers/registry.js", () => ({
   getProviders: () => mockProviders,
+  getOrderedProviders: (config: { enabledProviders: unknown }) => {
+    if (!config || config.enabledProviders === "auto") return mockProviders;
+    const enabled = new Set(
+      Array.isArray(config.enabledProviders) ? config.enabledProviders : [],
+    );
+    return mockProviders.filter((p: { id: string }) => enabled.has(p.id));
+  },
 }));
 
 vi.mock("../src/lib/modelsdev-pricing.js", () => ({
@@ -149,32 +156,26 @@ describe("status surface parity regressions", () => {
 
     // Stage 1 parity guard: both surfaces should resolve local config from worktree root,
     // not nested active directory config.
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            enabledProviders: ["synthetic"],
-            formatStyle: "allWindows",
-            showOnQuestion: false,
-            showSessionTokens: false,
-            minIntervalMs: 60_000,
-          },
-        },
+        enabled: true,
+        enabledProviders: ["synthetic"],
+        formatStyle: "allWindows",
+        showOnQuestion: false,
+        showSessionTokens: false,
+        minIntervalMs: 60_000,
       }),
       "utf8",
     );
 
+    mkdirSync(join(nestedDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(nestedDir, "opencode.json"),
+      join(nestedDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: false,
-            enabledProviders: [],
-          },
-        },
+        enabled: false,
+        enabledProviders: [],
       }),
       "utf8",
     );
@@ -250,30 +251,24 @@ describe("status surface parity regressions", () => {
     mkdirSync(join(nestedDir, ".opencode"), { recursive: true });
     process.env.OPENCODE_CONFIG_DIR = ".opencode";
 
+    mkdirSync(join(worktreeDir, ".opencode", "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, ".opencode", "opencode.json"),
+      join(worktreeDir, ".opencode", "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: false,
-          },
-        },
+        enabled: false,
       }),
       "utf8",
     );
+    mkdirSync(join(nestedDir, ".opencode", "status-provider"), { recursive: true });
     writeFileSync(
-      join(nestedDir, ".opencode", "opencode.json"),
+      join(nestedDir, ".opencode", "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            enabledProviders: ["synthetic"],
-            formatStyle: "allWindows",
-            showOnQuestion: false,
-            showSessionTokens: false,
-            minIntervalMs: 60_000,
-          },
-        },
+        enabled: true,
+        enabledProviders: ["synthetic"],
+        formatStyle: "allWindows",
+        showOnQuestion: false,
+        showSessionTokens: false,
+        minIntervalMs: 60_000,
       }),
       "utf8",
     );
@@ -343,36 +338,30 @@ describe("status surface parity regressions", () => {
     const globalConfigDir = join(process.env.XDG_CONFIG_HOME!, "opencode");
     mkdirSync(globalConfigDir, { recursive: true });
 
+    mkdirSync(join(globalConfigDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(globalConfigDir, "opencode.json"),
+      join(globalConfigDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            enabledProviders: ["synthetic"],
-            formatStyle: "allWindows",
-            showOnQuestion: false,
-            showSessionTokens: false,
-            minIntervalMs: 60_000,
-          },
-        },
+        enabled: true,
+        enabledProviders: ["synthetic"],
+        formatStyle: "allWindows",
+        showOnQuestion: false,
+        showSessionTokens: false,
+        minIntervalMs: 60_000,
       }),
       "utf8",
     );
 
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            enabledProviders: ["openai"],
-            formatStyle: "allWindows",
-            showOnQuestion: false,
-            showSessionTokens: false,
-            minIntervalMs: 60_000,
-          },
-        },
+        enabled: true,
+        enabledProviders: ["openai"],
+        formatStyle: "allWindows",
+        showOnQuestion: false,
+        showSessionTokens: false,
+        minIntervalMs: 60_000,
       }),
       "utf8",
     );

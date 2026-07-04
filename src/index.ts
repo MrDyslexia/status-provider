@@ -18,7 +18,7 @@ type V1PluginModule = {
 // loader, which iterates Object.values(mod) and can conflict with other
 // plugins that also use the legacy path.
 const pluginModule = {
-  id: "@mrdyslexia/status-provider",
+  id: "status-provider",
   server: StatusProviderPlugin,
 } satisfies V1PluginModule;
 

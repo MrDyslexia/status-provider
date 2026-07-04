@@ -1,0 +1,2 @@
+export declare const ANTIGRAVITY_CLIENT_ID = "REDACTED_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com";
+export declare const ANTIGRAVITY_CLIENT_SECRET = "REDACTED_GOOGLE_OAUTH_CLIENT_SECRET";

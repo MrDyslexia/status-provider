@@ -102,26 +102,20 @@ describe("tui runtime helpers", () => {
   it("still uses worktree root when process.cwd() differs from the active nested directory", async () => {
     process.chdir(tempDir);
 
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: false,
-          },
-        },
+        enabled: false,
       }),
       "utf8",
     );
 
+    mkdirSync(join(nestedDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(nestedDir, "opencode.json"),
+      join(nestedDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-          },
-        },
+        enabled: true,
       }),
       "utf8",
     );
@@ -148,26 +142,20 @@ describe("tui runtime helpers", () => {
   });
 
   it("falls back to the active directory when no worktree root is available", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-          },
-        },
+        enabled: true,
       }),
       "utf8",
     );
 
+    mkdirSync(join(nestedDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(nestedDir, "opencode.json"),
+      join(nestedDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: false,
-          },
-        },
+        enabled: false,
       }),
       "utf8",
     );
@@ -194,26 +182,20 @@ describe("tui runtime helpers", () => {
   });
 
   it("loads sidebar config from the worktree root when the active directory is nested", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: false,
-          },
-        },
+        enabled: false,
       }),
       "utf8",
     );
 
+    mkdirSync(join(nestedDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(nestedDir, "opencode.json"),
+      join(nestedDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-          },
-        },
+        enabled: true,
       }),
       "utf8",
     );
@@ -355,15 +337,12 @@ describe("tui runtime helpers", () => {
   });
 
   it("keeps the sidebar enabled when enableToast is false", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            enableToast: false,
-          },
-        },
+        enabled: true,
+        enableToast: false,
       }),
       "utf8",
     );
@@ -400,16 +379,13 @@ describe("tui runtime helpers", () => {
   });
 
   it("shows sidebar loading instead of bare unavailable while onlyCurrentModel waits for session metadata", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            enabledProviders: ["copilot"],
-            onlyCurrentModel: true,
-          },
-        },
+        enabled: true,
+        enabledProviders: ["copilot"],
+        onlyCurrentModel: true,
       }),
       "utf8",
     );
@@ -455,15 +431,12 @@ describe("tui runtime helpers", () => {
   });
 
   it("preserves canonical all-window formatStyle through sidebar runtime collection and formatting", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            formatStyle: "allWindows",
-          },
-        },
+        enabled: true,
+        formatStyle: "allWindows",
       }),
       "utf8",
     );
@@ -518,16 +491,13 @@ describe("tui runtime helpers", () => {
   });
 
   it("forwards weekly grouped row data unchanged from render-data to sidebar formatter", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            formatStyle: "allWindows",
-            percentDisplayMode: "used",
-          },
-        },
+        enabled: true,
+        formatStyle: "allWindows",
+        percentDisplayMode: "used",
       }),
       "utf8",
     );
@@ -578,14 +548,11 @@ describe("tui runtime helpers", () => {
   });
 
   it("prefers api.client.config.providers over sidebar state providers", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-          },
-        },
+        enabled: true,
       }),
       "utf8",
     );
@@ -664,19 +631,16 @@ describe("tui runtime helpers", () => {
   });
 
   it("resolves compact registration and suppresses native provider status clients", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            tuiCompactStatus: {
-              enabled: true,
-              homeBottom: true,
-              sessionPrompt: true,
-              suppressWhenNativeProviderStatus: true,
-            },
-          },
+        enabled: true,
+        tuiCompactStatus: {
+          enabled: true,
+          homeBottom: true,
+          sessionPrompt: true,
+          suppressWhenNativeProviderStatus: true,
         },
       }),
       "utf8",
@@ -711,22 +675,19 @@ describe("tui runtime helpers", () => {
   });
 
   it("resolves sidebar independently from compact native-provider suppression", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            tuiSidebarPanel: {
-              enabled: true,
-            },
-            tuiCompactStatus: {
-              enabled: true,
-              homeBottom: true,
-              sessionPrompt: true,
-              suppressWhenNativeProviderStatus: true,
-            },
-          },
+        enabled: true,
+        tuiSidebarPanel: {
+          enabled: true,
+        },
+        tuiCompactStatus: {
+          enabled: true,
+          homeBottom: true,
+          sessionPrompt: true,
+          suppressWhenNativeProviderStatus: true,
         },
       }),
       "utf8",
@@ -766,22 +727,19 @@ describe("tui runtime helpers", () => {
   });
 
   it("loads compact session surface while returning disabled sidebar when sidebar config is off", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            percentDisplayMode: "used",
-            tuiSidebarPanel: {
-              enabled: false,
-            },
-            tuiCompactStatus: {
-              enabled: true,
-              sessionPrompt: true,
-              maxWidth: 42,
-            },
-          },
+        enabled: true,
+        percentDisplayMode: "used",
+        tuiSidebarPanel: {
+          enabled: false,
+        },
+        tuiCompactStatus: {
+          enabled: true,
+          sessionPrompt: true,
+          maxWidth: 42,
         },
       }),
       "utf8",
@@ -832,20 +790,17 @@ describe("tui runtime helpers", () => {
   });
 
   it("skips session status collection when sidebar and session compact are disabled", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            tuiSidebarPanel: {
-              enabled: false,
-            },
-            tuiCompactStatus: {
-              enabled: true,
-              sessionPrompt: false,
-            },
-          },
+        enabled: true,
+        tuiSidebarPanel: {
+          enabled: false,
+        },
+        tuiCompactStatus: {
+          enabled: true,
+          sessionPrompt: false,
         },
       }),
       "utf8",
@@ -878,20 +833,17 @@ describe("tui runtime helpers", () => {
   });
 
   it("loads sidebar and compact session surfaces from one collection", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            percentDisplayMode: "used",
-            onlyCurrentModel: true,
-            tuiCompactStatus: {
-              enabled: true,
-              sessionPrompt: true,
-              maxWidth: 42,
-            },
-          },
+        enabled: true,
+        percentDisplayMode: "used",
+        onlyCurrentModel: true,
+        tuiCompactStatus: {
+          enabled: true,
+          sessionPrompt: true,
+          maxWidth: 42,
         },
       }),
       "utf8",
@@ -972,17 +924,14 @@ describe("tui runtime helpers", () => {
   });
 
   it("uses compact fallback text when session collection has no data", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            tuiCompactStatus: {
-              enabled: true,
-              sessionPrompt: true,
-            },
-          },
+        enabled: true,
+        tuiCompactStatus: {
+          enabled: true,
+          sessionPrompt: true,
         },
       }),
       "utf8",
@@ -1015,18 +964,15 @@ describe("tui runtime helpers", () => {
   });
 
   it("marks both session surfaces loading while waiting for current selection", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            onlyCurrentModel: true,
-            tuiCompactStatus: {
-              enabled: true,
-              sessionPrompt: true,
-            },
-          },
+        enabled: true,
+        onlyCurrentModel: true,
+        tuiCompactStatus: {
+          enabled: true,
+          sessionPrompt: true,
         },
       }),
       "utf8",
@@ -1069,17 +1015,14 @@ describe("tui runtime helpers", () => {
   });
 
   it("uses compact fallback text when home compact formatting returns empty", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            tuiCompactStatus: {
-              enabled: true,
-              homeBottom: true,
-            },
-          },
+        enabled: true,
+        tuiCompactStatus: {
+          enabled: true,
+          homeBottom: true,
         },
       }),
       "utf8",
@@ -1118,21 +1061,18 @@ describe("tui runtime helpers", () => {
   });
 
   it("loads home compact with an onlyCurrentModel false config copy", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(worktreeDir, "opencode.json"),
+      join(worktreeDir, "status-provider", "config.json"),
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            onlyCurrentModel: true,
-            showSessionTokens: true,
-            percentDisplayMode: "used",
-            tuiCompactStatus: {
-              enabled: true,
-              homeBottom: true,
-              maxWidth: 40,
-            },
-          },
+        enabled: true,
+        onlyCurrentModel: true,
+        showSessionTokens: true,
+        percentDisplayMode: "used",
+        tuiCompactStatus: {
+          enabled: true,
+          homeBottom: true,
+          maxWidth: 40,
         },
       }),
       "utf8",

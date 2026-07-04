@@ -17,6 +17,13 @@ const { mockProviders, runtimeDirs } = vi.hoisted(() => ({
 
 vi.mock("../src/providers/registry.js", () => ({
   getProviders: () => mockProviders,
+  getOrderedProviders: (config: { enabledProviders: unknown }) => {
+    if (!config || config.enabledProviders === "auto") return mockProviders;
+    const enabled = new Set(
+      Array.isArray(config.enabledProviders) ? config.enabledProviders : [],
+    );
+    return mockProviders.filter((p: { id: string }) => enabled.has(p.id));
+  },
 }));
 
 vi.mock("../src/lib/opencode-runtime-paths.js", () => ({
@@ -90,16 +97,10 @@ describe("runCliShowCommand", () => {
       }),
     };
     mockProviders.push(provider);
+    mkdirSync(join(workspaceDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(workspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabledProviders: ["synthetic"],
-            showSessionTokens: true,
-          },
-        },
-      }),
+      join(workspaceDir, "status-provider", "config.json"),
+      JSON.stringify({ enabledProviders: ["synthetic"], showSessionTokens: true }),
       "utf8",
     );
 
@@ -136,11 +137,7 @@ describe("runCliShowCommand", () => {
       fetch: vi.fn().mockResolvedValue({ attempted: true, entries: [], errors: [] }),
     };
     mockProviders.push(openAiProvider, copilotProvider);
-    writeFileSync(
-      join(workspaceDir, "opencode.json"),
-      JSON.stringify({ experimental: { statusProvider: { enabledProviders: ["openai"] } } }),
-      "utf8",
-    );
+    // No sidecar config — auto-detect mode so CLI --provider override can select copilot
 
     const stdout = createCaptureStream();
     const stderr = createCaptureStream();
@@ -201,9 +198,10 @@ describe("runCliShowCommand", () => {
   });
 
   it("returns non-zero when status is disabled in config", async () => {
+    mkdirSync(join(workspaceDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(workspaceDir, "opencode.json"),
-      JSON.stringify({ experimental: { statusProvider: { enabled: false } } }),
+      join(workspaceDir, "status-provider", "config.json"),
+      JSON.stringify({ enabled: false }),
       "utf8",
     );
     const stdout = createCaptureStream();
@@ -248,14 +246,16 @@ describe("runCliShowCommand", () => {
     const nestedDir = join(workspaceDir, "packages", "app");
     mkdirSync(nestedDir, { recursive: true });
     mkdirSync(join(workspaceDir, ".git"));
+    mkdirSync(join(workspaceDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(workspaceDir, "opencode.json"),
-      JSON.stringify({ experimental: { statusProvider: { enabled: false } } }),
+      join(workspaceDir, "status-provider", "config.json"),
+      JSON.stringify({ enabled: false }),
       "utf8",
     );
+    mkdirSync(join(nestedDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(nestedDir, "opencode.json"),
-      JSON.stringify({ experimental: { statusProvider: { enabled: true } } }),
+      join(nestedDir, "status-provider", "config.json"),
+      JSON.stringify({ enabled: true }),
       "utf8",
     );
     const stdout = createCaptureStream();
@@ -283,11 +283,11 @@ describe("runCliShowCommand", () => {
     mockProviders.push(provider);
     mkdirSync(nestedDir, { recursive: true });
     mkdirSync(join(workspaceDir, ".git"));
-    mkdirSync(join(workspaceDir, ".opencode"), { recursive: true });
+    mkdirSync(join(workspaceDir, ".opencode", "status-provider"), { recursive: true });
     process.env.OPENCODE_CONFIG_DIR = ".opencode";
     writeFileSync(
-      join(workspaceDir, ".opencode", "opencode.json"),
-      JSON.stringify({ experimental: { statusProvider: { enabled: false } } }),
+      join(workspaceDir, ".opencode", "status-provider", "config.json"),
+      JSON.stringify({ enabled: false }),
       "utf8",
     );
     const stdout = createCaptureStream();
@@ -326,16 +326,10 @@ describe("runCliShowCommand", () => {
       }),
     };
     mockProviders.push(copilotProvider, geminiCliProvider);
+    mkdirSync(join(workspaceDir, "status-provider"), { recursive: true });
     writeFileSync(
-      join(workspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabledProviders: ["copilot", "google-gemini-cli"],
-            formatStyle: "allWindows",
-          },
-        },
-      }),
+      join(workspaceDir, "status-provider", "config.json"),
+      JSON.stringify({ enabledProviders: ["copilot", "google-gemini-cli"], formatStyle: "allWindows" }),
       "utf8",
     );
     const stdout = createCaptureStream();

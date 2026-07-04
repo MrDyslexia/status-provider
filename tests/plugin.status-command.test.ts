@@ -1,0 +1,1250 @@
+import { rm } from "fs/promises";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { COMMAND_HANDLED_SENTINEL } from "../src/lib/command-handled.js";
+import { DEFAULT_CONFIG } from "../src/lib/types.js";
+import {
+  createAlibabaAuthModuleMock,
+  createConfigModuleMock,
+  createPluginTestClient as createClient,
+  createPluginToolMockModule,
+  createPricingModuleMock,
+  createProvidersRegistryModuleMock,
+  createQwenAuthModuleMock,
+  createSessionTokensModuleMock,
+  getPromptText,
+  getToastMessage,
+  seedDefaultPluginBootstrapMocks,
+} from "./helpers/plugin-test-harness.js";
+
+const TEST_RUNTIME_ROOT = "/tmp/status-provider-plugin-status-command-tests";
+
+const mocks = vi.hoisted(() => ({
+  loadConfig: vi.fn(),
+  getProviders: vi.fn(),
+  maybeRefreshPricingSnapshot: vi.fn(),
+  getPricingSnapshotMeta: vi.fn(),
+  getPricingSnapshotSource: vi.fn(),
+  getRuntimePricingRefreshStatePath: vi.fn(),
+  getRuntimePricingSnapshotPath: vi.fn(),
+  setPricingSnapshotAutoRefresh: vi.fn(),
+  setPricingSnapshotSelection: vi.fn(),
+  resolveQwenLocalPlanCached: vi.fn(),
+  resolveAlibabaCodingPlanAuthCached: vi.fn(),
+  fetchSessionTokensForDisplay: vi.fn(),
+}));
+
+vi.mock("@opencode-ai/plugin", () => createPluginToolMockModule());
+
+vi.mock("../src/lib/config.js", () => createConfigModuleMock(mocks.loadConfig));
+
+vi.mock("../src/providers/registry.js", () =>
+  createProvidersRegistryModuleMock(mocks.getProviders),
+);
+
+vi.mock("../src/lib/modelsdev-pricing.js", () => createPricingModuleMock(mocks));
+
+vi.mock("../src/lib/session-tokens.js", () =>
+  createSessionTokensModuleMock(mocks.fetchSessionTokensForDisplay),
+);
+
+vi.mock("../src/lib/qwen-auth.js", () =>
+  createQwenAuthModuleMock(mocks.resolveQwenLocalPlanCached),
+);
+
+vi.mock("../src/lib/alibaba-auth.js", () =>
+  createAlibabaAuthModuleMock(mocks.resolveAlibabaCodingPlanAuthCached),
+);
+
+vi.mock("../src/lib/opencode-runtime-paths.js", () => ({
+  getOpencodeRuntimeDirs: () => ({
+    dataDir: `${TEST_RUNTIME_ROOT}/data`,
+    configDir: `${TEST_RUNTIME_ROOT}/config`,
+    cacheDir: `${TEST_RUNTIME_ROOT}/cache`,
+    stateDir: `${TEST_RUNTIME_ROOT}/state`,
+  }),
+}));
+
+describe("/status command behavior", () => {
+  let savedConfigDir: string | undefined;
+
+  beforeEach(async () => {
+    savedConfigDir = process.env.OPENCODE_CONFIG_DIR;
+    delete process.env.OPENCODE_CONFIG_DIR;
+    seedDefaultPluginBootstrapMocks(mocks, {
+      configOverrides: {
+        enabled: true,
+        showOnQuestion: false,
+        showSessionTokens: false,
+        minIntervalMs: 60_000,
+      },
+      resetPluginState: true,
+    });
+    await rm(TEST_RUNTIME_ROOT, { recursive: true, force: true });
+    const { __resetStatusStateForTests } = await import("../src/lib/status-state.js");
+    __resetStatusStateForTests();
+    mocks.resolveQwenLocalPlanCached.mockResolvedValue({ state: "none" });
+    mocks.resolveAlibabaCodingPlanAuthCached.mockResolvedValue({ state: "none" });
+  });
+
+  afterEach(async () => {
+    if (savedConfigDir !== undefined) process.env.OPENCODE_CONFIG_DIR = savedConfigDir;
+    else delete process.env.OPENCODE_CONFIG_DIR;
+    const { __resetStatusStateForTests } = await import("../src/lib/status-state.js");
+    __resetStatusStateForTests();
+    await rm(TEST_RUNTIME_ROOT, { recursive: true, force: true });
+  });
+
+  it("applies pricing snapshot selection from config on first use", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      pricingSnapshot: { source: "bundled", autoRefresh: 7 },
+      showOnQuestion: false,
+      showSessionTokens: false,
+      minIntervalMs: 60_000,
+    });
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient();
+
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    // Config is deferred — trigger a command to force the first config load.
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-init",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(mocks.loadConfig).toHaveBeenCalledWith(
+      client,
+      expect.any(Object),
+      expect.objectContaining({ configRootDir: process.cwd() }),
+    );
+    expect(mocks.setPricingSnapshotSelection).toHaveBeenCalledWith("bundled");
+    expect(mocks.setPricingSnapshotAutoRefresh).toHaveBeenCalledWith(7);
+    expect(mocks.maybeRefreshPricingSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "init",
+        snapshotSelection: "bundled",
+      }),
+    );
+  });
+
+  it("loads config before honoring the first session.idle trigger", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      showOnIdle: false,
+      showOnCompact: false,
+      showOnQuestion: false,
+      showSessionTokens: false,
+      minIntervalMs: 60_000,
+    });
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient();
+
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await hooks.event?.({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "session-idle" },
+      },
+    } as any);
+
+    expect(mocks.loadConfig).toHaveBeenCalledTimes(1);
+    expect(client.tui.showToast).not.toHaveBeenCalled();
+    expect(mocks.maybeRefreshPricingSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason: "init",
+        snapshotSelection: DEFAULT_CONFIG.pricingSnapshot.source,
+      }),
+    );
+  });
+
+  it("shows explicit provider availability errors in idle-triggered toasts", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      enabledProviders: ["copilot"],
+      showOnIdle: true,
+      showOnCompact: false,
+      showOnQuestion: false,
+      showSessionTokens: false,
+      minIntervalMs: 60_000,
+    });
+
+    const provider = {
+      id: "copilot",
+      isAvailable: vi.fn().mockRejectedValue(new Error("boom")),
+      fetch: vi.fn(),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient();
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await hooks.event?.({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "session-idle-explicit-provider" },
+      },
+    } as any);
+
+    expect(provider.fetch).not.toHaveBeenCalled();
+    expect(client.tui.showToast).toHaveBeenCalledTimes(1);
+    const message = getToastMessage(client);
+    expect(message).toContain("Copilot: Unavailable (not detected)");
+  });
+
+  it("shows explicit current-model skip errors in idle-triggered toasts", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      enabledProviders: ["openai"],
+      onlyCurrentModel: true,
+      showOnIdle: true,
+      showOnCompact: false,
+      showOnQuestion: false,
+      showSessionTokens: false,
+      minIntervalMs: 60_000,
+    });
+
+    const provider = {
+      id: "openai",
+      matchesCurrentModel: vi.fn().mockReturnValue(false),
+      isAvailable: vi.fn(),
+      fetch: vi.fn(),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient({
+      modelID: "claude-3.7-sonnet",
+      providerID: "anthropic",
+    });
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await hooks.event?.({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "session-idle-model-filter" },
+      },
+    } as any);
+
+    expect(provider.isAvailable).not.toHaveBeenCalled();
+    expect(provider.fetch).not.toHaveBeenCalled();
+    expect(client.tui.showToast).toHaveBeenCalledTimes(1);
+    const message = getToastMessage(client);
+    expect(message).toContain("OpenAI: Skipped (current model: claude-3.7-sonnet)");
+  });
+
+  it("applies percentDisplayMode to idle-triggered toast output", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      enabledProviders: ["copilot"],
+      showOnIdle: true,
+      showOnCompact: false,
+      showOnQuestion: false,
+      showSessionTokens: false,
+      percentDisplayMode: "used",
+      minIntervalMs: 60_000,
+    });
+
+    const provider = {
+      id: "copilot",
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi.fn().mockResolvedValue({
+        attempted: true,
+        entries: [
+          {
+            name: "Copilot",
+            percentRemaining: 81,
+            resetTimeIso: "2099-01-01T00:00:00.000Z",
+          },
+        ],
+        errors: [],
+      }),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient();
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await hooks.event?.({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "session-idle-percent-display" },
+      },
+    } as any);
+
+    expect(client.tui.showToast).toHaveBeenCalledTimes(1);
+    const message = getToastMessage(client);
+    expect(message).toContain("19% used");
+    expect(message).not.toContain("81% left");
+  });
+
+  it("keeps /status remaining-oriented when percentDisplayMode is used", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      enabledProviders: ["openai"],
+      showOnQuestion: false,
+      showSessionTokens: false,
+      percentDisplayMode: "used",
+      minIntervalMs: 60_000,
+    });
+
+    const provider = {
+      id: "openai",
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi.fn().mockResolvedValue({
+        attempted: true,
+        entries: [{ name: "OpenAI Pro", percentRemaining: 81 }],
+        errors: [],
+      }),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient();
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-status-percent-display-boundary",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(client.session.prompt).toHaveBeenCalledTimes(1);
+    const injected = getPromptText(client);
+    expect(injected).toContain("81% left");
+    expect(injected).not.toContain("19% left");
+  });
+
+  it("rewrites default_agent only when one zero-width-normalized key matches", async () => {
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const hooks = await StatusProviderPlugin({ client: createClient() } as any);
+
+    const uniqueMatch = {
+      agent: {
+        "\u200Bplanner": {},
+        coder: {},
+      },
+      default_agent: "planner",
+    };
+
+    await hooks.config?.(uniqueMatch as any);
+    expect(uniqueMatch.default_agent).toBe("\u200Bplanner");
+
+    const ambiguousMatch = {
+      agent: {
+        "\u200Bplanner": {},
+        "\u200Cplanner": {},
+      },
+      default_agent: "planner",
+    };
+
+    await hooks.config?.(ambiguousMatch as any);
+    expect(ambiguousMatch.default_agent).toBe("planner");
+  });
+
+  it("renders provider errors even when no status entries are returned", async () => {
+    const provider = {
+      id: "alibaba-coding-plan",
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi.fn().mockResolvedValue({
+        attempted: true,
+        entries: [],
+        errors: [
+          { label: "Alibaba Coding Plan", message: "Unsupported Alibaba Coding Plan tier: max" },
+        ],
+      }),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient();
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-errors",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(client.session.prompt).toHaveBeenCalledTimes(1);
+    const injected = getPromptText(client);
+    expect(injected).toContain("Alibaba Coding Plan: Unsupported Alibaba Coding Plan tier: max");
+    expect(injected).not.toContain("Providers detected");
+  });
+
+  it("converts provider fetch failures into injected status errors", async () => {
+    const provider = {
+      id: "cursor",
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi.fn().mockRejectedValue(new Error("sqlite busy")),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient({ modelID: "auto", providerID: "cursor" });
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-fetch-failure",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(client.session.prompt).toHaveBeenCalledTimes(1);
+    const injected = getPromptText(client);
+    expect(injected).toContain("Cursor: Failed to read status data");
+    expect(injected).not.toContain("Providers detected");
+  });
+
+  it("retries a toast provider fetch failure on a deferred timer with provider cache bypass", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.loadConfig.mockResolvedValueOnce({
+        ...DEFAULT_CONFIG,
+        enabled: true,
+        enabledProviders: ["openai"],
+        showOnIdle: true,
+        showOnCompact: false,
+        showOnQuestion: false,
+        showSessionTokens: false,
+        minIntervalMs: 60_000,
+      });
+
+      const provider = {
+        id: "openai",
+        isAvailable: vi.fn().mockResolvedValue(true),
+        fetch: vi
+          .fn()
+          .mockRejectedValueOnce(new Error("firewall warming up"))
+          .mockResolvedValueOnce({
+            attempted: true,
+            entries: [{ name: "OpenAI Pro", percentRemaining: 72 }],
+            errors: [],
+          }),
+      };
+      mocks.getProviders.mockReturnValue([provider]);
+
+      const { StatusProviderPlugin } = await import("../src/plugin.js");
+      const client = createClient({ modelID: "openai/gpt-5", providerID: "openai" });
+      const hooks = await StatusProviderPlugin({ client } as any);
+
+      await hooks.event?.({
+        event: {
+          type: "session.idle",
+          properties: { sessionID: "session-deferred-retry" },
+        },
+      } as any);
+
+      expect(provider.fetch).toHaveBeenCalledTimes(1);
+      expect(client.tui.showToast).toHaveBeenCalledTimes(1);
+      expect(getToastMessage(client, 0)).toContain("OpenAI: Failed to read status data");
+
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      expect(provider.fetch).toHaveBeenCalledTimes(2);
+      expect(client.tui.showToast).toHaveBeenCalledTimes(2);
+      expect(getToastMessage(client, 1)).toContain("72% left");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a suppressed toast provider fetch failure when showOnBothFail is false", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.loadConfig.mockResolvedValueOnce({
+        ...DEFAULT_CONFIG,
+        enabled: true,
+        enabledProviders: ["openai"],
+        showOnIdle: true,
+        showOnCompact: false,
+        showOnQuestion: false,
+        showOnBothFail: false,
+        showSessionTokens: false,
+        minIntervalMs: 60_000,
+      });
+
+      const provider = {
+        id: "openai",
+        isAvailable: vi.fn().mockResolvedValue(true),
+        fetch: vi
+          .fn()
+          .mockRejectedValueOnce(new Error("startup network unavailable"))
+          .mockResolvedValueOnce({
+            attempted: true,
+            entries: [{ name: "OpenAI Pro", percentRemaining: 61 }],
+            errors: [],
+          }),
+      };
+      mocks.getProviders.mockReturnValue([provider]);
+
+      const { StatusProviderPlugin } = await import("../src/plugin.js");
+      const client = createClient({ modelID: "openai/gpt-5", providerID: "openai" });
+      const hooks = await StatusProviderPlugin({ client } as any);
+
+      await hooks.event?.({
+        event: {
+          type: "session.idle",
+          properties: { sessionID: "session-deferred-suppressed-error" },
+        },
+      } as any);
+
+      expect(provider.fetch).toHaveBeenCalledTimes(1);
+      expect(client.tui.showToast).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      expect(provider.fetch).toHaveBeenCalledTimes(2);
+      expect(client.tui.showToast).toHaveBeenCalledTimes(1);
+      expect(getToastMessage(client)).toContain("61% left");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries an explicit provider availability exception on a deferred timer", async () => {
+    vi.useFakeTimers();
+    try {
+      mocks.loadConfig.mockResolvedValueOnce({
+        ...DEFAULT_CONFIG,
+        enabled: true,
+        enabledProviders: ["openai"],
+        showOnIdle: true,
+        showOnCompact: false,
+        showOnQuestion: false,
+        showSessionTokens: false,
+        minIntervalMs: 60_000,
+      });
+
+      const provider = {
+        id: "openai",
+        isAvailable: vi
+          .fn()
+          .mockRejectedValueOnce(new Error("OpenCode auth not readable yet"))
+          .mockResolvedValue(true),
+        fetch: vi.fn().mockResolvedValue({
+          attempted: true,
+          entries: [{ name: "OpenAI Pro", percentRemaining: 58 }],
+          errors: [],
+        }),
+      };
+      mocks.getProviders.mockReturnValue([provider]);
+
+      const { StatusProviderPlugin } = await import("../src/plugin.js");
+      const client = createClient({ modelID: "openai/gpt-5", providerID: "openai" });
+      const hooks = await StatusProviderPlugin({ client } as any);
+
+      await hooks.event?.({
+        event: {
+          type: "session.idle",
+          properties: { sessionID: "session-deferred-availability" },
+        },
+      } as any);
+
+      expect(provider.isAvailable).toHaveBeenCalledTimes(1);
+      expect(provider.fetch).not.toHaveBeenCalled();
+      expect(client.tui.showToast).toHaveBeenCalledTimes(1);
+      expect(getToastMessage(client, 0)).toContain("OpenAI: Unavailable (not detected)");
+
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      expect(provider.isAvailable).toHaveBeenCalledTimes(2);
+      expect(provider.fetch).toHaveBeenCalledTimes(1);
+      expect(client.tui.showToast).toHaveBeenCalledTimes(2);
+      expect(getToastMessage(client, 1)).toContain("58% left");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("consumes a pending deferred retry immediately on the next lifecycle toast", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      enabledProviders: ["openai"],
+      showOnIdle: true,
+      showOnCompact: true,
+      showOnQuestion: false,
+      showSessionTokens: false,
+      minIntervalMs: 60_000,
+    });
+
+    const provider = {
+      id: "openai",
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi
+        .fn()
+        .mockRejectedValueOnce(new Error("opencode unavailable"))
+        .mockResolvedValueOnce({
+          attempted: true,
+          entries: [{ name: "OpenAI Pro", percentRemaining: 66 }],
+          errors: [],
+        }),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient({ modelID: "openai/gpt-5", providerID: "openai" });
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await hooks.event?.({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "session-deferred-lifecycle" },
+      },
+    } as any);
+    await hooks.event?.({
+      event: {
+        type: "session.compacted",
+        properties: { sessionID: "session-deferred-lifecycle" },
+      },
+    } as any);
+
+    expect(provider.fetch).toHaveBeenCalledTimes(2);
+    expect(client.tui.showToast).toHaveBeenCalledTimes(2);
+    expect(getToastMessage(client, 1)).toContain("66% left");
+  });
+
+  it("reports explicit cursor providers with no local history as no local usage yet", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      enabledProviders: ["cursor"],
+      showOnQuestion: false,
+      showSessionTokens: false,
+      minIntervalMs: 60_000,
+    });
+
+    const provider = {
+      id: "cursor",
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi.fn().mockResolvedValue({
+        attempted: false,
+        entries: [],
+        errors: [],
+      }),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient({ modelID: "auto", providerID: "cursor" });
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-cursor-empty",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(client.session.prompt).toHaveBeenCalledTimes(1);
+    const injected = getPromptText(client);
+    expect(injected).toContain("Cursor: No local usage yet");
+    expect(injected).not.toContain("Cursor: Not configured");
+  });
+
+  it("reports explicit Anthropic providers with local auth but no exposed status windows", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      enabledProviders: ["anthropic"],
+      showOnQuestion: false,
+      showSessionTokens: false,
+      minIntervalMs: 60_000,
+    });
+
+    const provider = {
+      id: "anthropic",
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi.fn().mockResolvedValue({
+        attempted: false,
+        entries: [],
+        errors: [],
+      }),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient({
+      modelID: "anthropic/claude-sonnet-4-5",
+      providerID: "anthropic",
+    });
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-anthropic-empty",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(client.session.prompt).toHaveBeenCalledTimes(1);
+    const injected = getPromptText(client);
+    expect(injected).toContain(
+      "Anthropic: Status unavailable via local Claude CLI or Claude OAuth fallback",
+    );
+    expect(injected).not.toContain("Anthropic: Not configured");
+  });
+
+  it("reports Anthropic no-data guidance in auto mode when it is the only active provider", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      enabledProviders: "auto",
+      showOnQuestion: false,
+      showSessionTokens: false,
+      minIntervalMs: 60_000,
+    });
+
+    const provider = {
+      id: "anthropic",
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi.fn().mockResolvedValue({
+        attempted: false,
+        entries: [],
+        errors: [],
+      }),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient({
+      modelID: "anthropic/claude-sonnet-4-5",
+      providerID: "anthropic",
+    });
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-anthropic-auto-empty",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(client.session.prompt).toHaveBeenCalledTimes(1);
+    const injected = getPromptText(client);
+    expect(injected).toContain(
+      "Anthropic: Status unavailable via local Claude CLI or Claude OAuth fallback",
+    );
+    expect(injected).not.toContain("Providers detected");
+  });
+
+  it("does not diagnose filtered providers as detected-but-empty when onlyCurrentModel excludes them", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      onlyCurrentModel: true,
+      showOnQuestion: false,
+      showSessionTokens: false,
+      minIntervalMs: 60_000,
+    });
+
+    const provider = {
+      id: "cursor",
+      matchesCurrentModel: vi.fn((model?: string) => model === "cursor/auto"),
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi.fn(),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient({ modelID: "openai/gpt-5" });
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-filtered-out",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(provider.fetch).not.toHaveBeenCalled();
+    expect(client.session.prompt).toHaveBeenCalledTimes(1);
+    const injected = getPromptText(client);
+    expect(injected).toContain(
+      "No enabled status providers matched the current model: openai/gpt-5.",
+    );
+    expect(injected).not.toContain("Providers detected");
+  });
+
+  it("does not reuse shared /status output after the current model changes in the same session", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      onlyCurrentModel: true,
+      showOnQuestion: false,
+      showSessionTokens: false,
+      minIntervalMs: 60_000,
+    });
+
+    const provider = {
+      id: "openai",
+      matchesCurrentModel: vi.fn((model?: string) => model === "openai/gpt-5"),
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi.fn().mockResolvedValue({
+        attempted: true,
+        entries: [{ name: "OpenAI Pro", percentRemaining: 95 }],
+        errors: [],
+      }),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient({ modelID: "openai/gpt-5", providerID: "openai" });
+    let currentSession = { data: { modelID: "openai/gpt-5", providerID: "openai" } };
+    client.session.get = vi.fn().mockImplementation(async () => currentSession);
+
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-model-switch",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    currentSession = { data: { modelID: "openai/gpt-4.1", providerID: "openai" } };
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-model-switch",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(client.session.prompt).toHaveBeenCalledTimes(2);
+    const firstInjected = getPromptText(client);
+    const secondInjected = getPromptText(client, 1);
+
+    expect(firstInjected).toContain("95% left");
+    expect(secondInjected).toContain(
+      "No enabled status providers matched the current model: openai/gpt-4.1.",
+    );
+    expect(secondInjected).not.toContain("95% left");
+  });
+
+  it("reuses shared status-state across /status sessions when render context matches", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      onlyCurrentModel: false,
+      showOnQuestion: false,
+      showSessionTokens: false,
+      minIntervalMs: 60_000,
+    });
+
+    const provider = {
+      id: "openai",
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi.fn().mockResolvedValue({
+        attempted: true,
+        entries: [{ name: "OpenAI Pro", percentRemaining: 95 }],
+        errors: [],
+      }),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient();
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-a",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-b",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(provider.fetch).toHaveBeenCalledTimes(1);
+    expect(getPromptText(client, 0)).toContain("95% left");
+    expect(getPromptText(client, 1)).toContain("95% left");
+  });
+
+  it("keys toast throttling by session render context so sessions do not share cached output", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      onlyCurrentModel: true,
+      showOnIdle: true,
+      showOnCompact: false,
+      showOnQuestion: false,
+      showSessionTokens: false,
+      minIntervalMs: 60_000,
+    });
+
+    const provider = {
+      id: "openai",
+      matchesCurrentModel: vi.fn(() => true),
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi.fn().mockImplementation(async ({ config }: any) => ({
+        attempted: true,
+        entries: [{ name: config.currentModel ?? "unknown-model", percentRemaining: 95 }],
+        errors: [],
+      })),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient();
+    client.session.get = vi.fn().mockImplementation(async ({ path }: any) => {
+      if (path.id === "session-a") {
+        return { data: { modelID: "openai/gpt-5", providerID: "openai" } };
+      }
+      return { data: { modelID: "openai/gpt-4.1", providerID: "openai" } };
+    });
+
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await hooks.event?.({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "session-a" },
+      },
+    } as any);
+    await hooks.event?.({
+      event: {
+        type: "session.idle",
+        properties: { sessionID: "session-b" },
+      },
+    } as any);
+
+    expect(provider.fetch).toHaveBeenCalledTimes(2);
+    expect(getToastMessage(client, 0)).toContain("openai/gpt-5");
+    expect(getToastMessage(client, 1)).toContain("openai/gpt-4.1");
+    expect(getToastMessage(client, 0)).not.toContain("openai/gpt-4.1");
+    expect(getToastMessage(client, 1)).not.toContain("openai/gpt-5");
+  });
+
+  it("keeps concurrent /status session-token output isolated per session", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      showOnQuestion: false,
+      showSessionTokens: true,
+      minIntervalMs: 60_000,
+    });
+
+    const provider = {
+      id: "openai",
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi.fn().mockResolvedValue({
+        attempted: true,
+        entries: [{ name: "OpenAI Pro", percentRemaining: 88 }],
+        errors: [],
+      }),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    let resolveSessionA: ((value: any) => void) | undefined;
+    let resolveSessionB: ((value: any) => void) | undefined;
+    mocks.fetchSessionTokensForDisplay.mockImplementation(
+      ({ sessionID }: { sessionID: string }) =>
+        new Promise((resolve) => {
+          if (sessionID === "session-a") {
+            resolveSessionA = resolve;
+            return;
+          }
+          if (sessionID === "session-b") {
+            resolveSessionB = resolve;
+            return;
+          }
+          resolve({ sessionTokens: undefined, error: undefined });
+        }),
+    );
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient({ modelID: "openai/gpt-5", providerID: "openai" });
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    const firstRun = hooks["command.execute.before"]?.({
+      command: "status",
+      sessionID: "session-a",
+    } as any);
+    const secondRun = hooks["command.execute.before"]?.({
+      command: "status",
+      sessionID: "session-b",
+    } as any);
+
+    for (let attempt = 0; attempt < 20; attempt++) {
+      if (
+        mocks.fetchSessionTokensForDisplay.mock.calls.length === 2 &&
+        typeof resolveSessionA === "function" &&
+        typeof resolveSessionB === "function"
+      ) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    expect(mocks.fetchSessionTokensForDisplay).toHaveBeenCalledTimes(2);
+    expect(resolveSessionA).toBeTypeOf("function");
+    expect(resolveSessionB).toBeTypeOf("function");
+
+    resolveSessionB?.({
+      sessionTokens: {
+        models: [{ modelID: "session-b-model", input: 222, output: 22 }],
+        totalInput: 222,
+        totalOutput: 22,
+      },
+      error: undefined,
+    });
+    resolveSessionA?.({
+      sessionTokens: {
+        models: [{ modelID: "session-a-model", input: 111, output: 11 }],
+        totalInput: 111,
+        totalOutput: 11,
+      },
+      error: undefined,
+    });
+
+    await expect(secondRun).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+    await expect(firstRun).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    const promptOutputs = client.session.prompt.mock.calls.map((call) => ({
+      sessionID: call?.[0]?.path?.id,
+      text: call?.[0]?.body?.parts?.[0]?.text ?? "",
+    }));
+    const sessionAOutput =
+      promptOutputs.find((output) => output.sessionID === "session-a")?.text ?? "";
+    const sessionBOutput =
+      promptOutputs.find((output) => output.sessionID === "session-b")?.text ?? "";
+
+    expect(sessionAOutput).toContain("session-a-model");
+    expect(sessionAOutput).not.toContain("session-b-model");
+    expect(sessionBOutput).toContain("session-b-model");
+    expect(sessionBOutput).not.toContain("session-a-model");
+  });
+
+  it("keeps qwen local request-plan status live across repeated /status commands", async () => {
+    const provider = {
+      id: "qwen-code",
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi
+        .fn()
+        .mockResolvedValueOnce({
+          attempted: true,
+          entries: [{ name: "Qwen Free", percentRemaining: 90 }],
+          errors: [],
+        })
+        .mockResolvedValueOnce({
+          attempted: true,
+          entries: [{ name: "Qwen Free", percentRemaining: 80 }],
+          errors: [],
+        }),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+    mocks.resolveQwenLocalPlanCached.mockResolvedValue({
+      state: "qwen_free",
+      accessToken: "token",
+    });
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient({ modelID: "qwen-code/qwen3-coder-plus" });
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-qwen",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-qwen",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(provider.fetch).toHaveBeenCalledTimes(2);
+    const latest = getPromptText(client, 1);
+    expect(latest).toContain("80% left");
+  });
+
+  it("keeps alibaba local request-plan status live across repeated /status commands", async () => {
+    const provider = {
+      id: "alibaba-coding-plan",
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi
+        .fn()
+        .mockResolvedValueOnce({
+          attempted: true,
+          entries: [{ name: "Alibaba Coding Plan (Lite) Weekly", percentRemaining: 70 }],
+          errors: [],
+        })
+        .mockResolvedValueOnce({
+          attempted: true,
+          entries: [{ name: "Alibaba Coding Plan (Lite) Weekly", percentRemaining: 60 }],
+          errors: [],
+        }),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+    mocks.resolveAlibabaCodingPlanAuthCached.mockResolvedValue({
+      state: "configured",
+      apiKey: "dashscope-key",
+      tier: "lite",
+    });
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient({ modelID: "alibaba/qwen3-coder-plus" });
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-alibaba",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-alibaba",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(provider.fetch).toHaveBeenCalledTimes(2);
+    const latest = getPromptText(client, 1);
+    expect(latest).toContain("60% left");
+  });
+
+  it("keeps cursor local usage live across repeated /status commands", async () => {
+    const provider = {
+      id: "cursor",
+      isAvailable: vi.fn().mockResolvedValue(true),
+      fetch: vi
+        .fn()
+        .mockResolvedValueOnce({
+          attempted: true,
+          entries: [{ name: "Cursor API (Pro)", percentRemaining: 95 }],
+          errors: [],
+        })
+        .mockResolvedValueOnce({
+          attempted: true,
+          entries: [{ name: "Cursor API (Pro)", percentRemaining: 90 }],
+          errors: [],
+        }),
+    };
+    mocks.getProviders.mockReturnValue([provider]);
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient({ modelID: "auto", providerID: "cursor" });
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-cursor",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-cursor",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(provider.fetch).toHaveBeenCalledTimes(2);
+    const latest = getPromptText(client, 1);
+    expect(latest).toContain("90% left");
+  });
+
+  it("runs /pricing_refresh with force=true by default and reports bundled pinning", async () => {
+    mocks.loadConfig.mockResolvedValueOnce({
+      ...DEFAULT_CONFIG,
+      enabled: true,
+      pricingSnapshot: { source: "bundled", autoRefresh: 7 },
+      showOnQuestion: false,
+      showSessionTokens: false,
+      minIntervalMs: 60_000,
+    });
+    mocks.getPricingSnapshotSource.mockReturnValue("bundled");
+    mocks.maybeRefreshPricingSnapshot.mockResolvedValue({
+      attempted: true,
+      updated: true,
+      state: {
+        version: 1,
+        updatedAt: Date.now(),
+        lastResult: "success",
+      },
+    });
+
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient();
+    const hooks = await StatusProviderPlugin({ client } as any);
+    await Promise.resolve();
+    await Promise.resolve();
+    mocks.maybeRefreshPricingSnapshot.mockClear();
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "pricing_refresh",
+        sessionID: "session-pricing-refresh",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(mocks.maybeRefreshPricingSnapshot).toHaveBeenCalledWith({
+      reason: "manual",
+      force: true,
+      snapshotSelection: "bundled",
+      allowRefreshWhenSelectionBundled: true,
+    });
+    const injected = getPromptText(client);
+    expect(injected).toContain("Pricing Refresh (/pricing_refresh)");
+    expect(injected).toContain("- selection: configured=bundled active=bundled");
+    expect(injected).toContain(
+      "runtime snapshot refreshed locally, but active reports remain pinned to bundled pricing",
+    );
+  });
+
+  it("rejects /pricing_refresh arguments", async () => {
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient();
+    const hooks = await StatusProviderPlugin({ client } as any);
+
+    // Force first config load so deferred init completes before our assertion.
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "status",
+        sessionID: "session-warmup",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+    await Promise.resolve();
+    mocks.maybeRefreshPricingSnapshot.mockClear();
+    client.session.prompt.mockClear();
+
+    await expect(
+      hooks["command.execute.before"]?.({
+        command: "pricing_refresh",
+        arguments: '{"force":false}',
+        sessionID: "session-pricing-refresh-invalid",
+      } as any),
+    ).rejects.toThrow(COMMAND_HANDLED_SENTINEL);
+
+    expect(mocks.maybeRefreshPricingSnapshot).not.toHaveBeenCalled();
+    const injected = getPromptText(client);
+    expect(injected).toContain("Invalid arguments for /pricing_refresh");
+    expect(injected).toContain("This command does not accept arguments.");
+  });
+});

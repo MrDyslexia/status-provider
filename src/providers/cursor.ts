@@ -1,0 +1,123 @@
+import type {
+  StatusProvider,
+  StatusProviderContext,
+  StatusProviderResult,
+  StatusProviderEntry,
+} from "../lib/entries.js";
+import { fmtUsdAmount } from "../lib/format-utils.js";
+import { isCanonicalProviderAvailable } from "../lib/provider-availability.js";
+import {
+  getEffectiveCursorIncludedApiUsd,
+  getCursorPlanDisplayName,
+  isCursorModelId,
+  isCursorProviderId,
+} from "../lib/cursor-pricing.js";
+import { inspectCursorOpenCodeIntegration } from "../lib/cursor-detection.js";
+import { getCurrentCursorUsageSummary } from "../lib/cursor-usage.js";
+import { attemptedResult, notAttemptedResult } from "./result-helpers.js";
+
+function buildCursorGroup(plan: string | null): string {
+  return plan ? `Cursor (${plan})` : "Cursor";
+}
+
+function buildCursorApiUsageValue(params: {
+  costUsd: number;
+  includedApiUsd: number;
+  partial: boolean;
+}): string {
+  const value = `${fmtUsdAmount(params.costUsd)}/${fmtUsdAmount(params.includedApiUsd)} used`;
+  return params.partial ? `${value} (partial)` : value;
+}
+
+export const cursorProvider: StatusProvider = {
+  id: "cursor",
+
+  async isAvailable(ctx: StatusProviderContext): Promise<boolean> {
+    const availableViaProviderConfig = await isCanonicalProviderAvailable({
+      ctx,
+      providerId: "cursor",
+      fallbackOnError: false,
+    });
+    if (availableViaProviderConfig) return true;
+    if (isCursorProviderId(ctx.config.currentProviderID)) return true;
+    if (isCursorModelId(ctx.config.currentModel)) return true;
+
+    const integration = await inspectCursorOpenCodeIntegration();
+    return integration.pluginEnabled || integration.providerConfigured;
+  },
+
+  matchesCurrentModel(model: string): boolean {
+    return isCursorModelId(model);
+  },
+
+  async fetch(ctx: StatusProviderContext): Promise<StatusProviderResult> {
+    const planLabel = getCursorPlanDisplayName(ctx.config.cursorPlan);
+    const group = buildCursorGroup(planLabel);
+    const includedApiUsd = getEffectiveCursorIncludedApiUsd({
+      plan: ctx.config.cursorPlan,
+      overrideUsd: ctx.config.cursorIncludedApiUsd,
+    });
+    const usage = await getCurrentCursorUsageSummary({
+      billingCycleStartDay: ctx.config.cursorBillingCycleStartDay,
+    });
+
+    if (usage.total.messageCount === 0 && includedApiUsd === undefined) {
+      return notAttemptedResult();
+    }
+
+    const errors =
+      usage.unknownModels.length > 0
+        ? [{ label: "Cursor", message: "Unknown Cursor model ids present in local history (see /status-provider-info)" }]
+        : [];
+    const hasPartialApiCoverage = usage.unknownModels.length > 0;
+    const entries: StatusProviderEntry[] = [];
+
+    if (includedApiUsd !== undefined) {
+      entries.push(
+        hasPartialApiCoverage
+          ? {
+              kind: "value",
+              name: planLabel ? `Cursor API (${planLabel})` : "Cursor API",
+              group,
+              label: "API:",
+              value: buildCursorApiUsageValue({
+                costUsd: usage.api.costUsd,
+                includedApiUsd,
+                partial: true,
+              }),
+              resetTimeIso: usage.window.resetTimeIso,
+            }
+          : {
+              name: planLabel ? `Cursor API (${planLabel})` : "Cursor API",
+              group,
+              label: "API:",
+              right: `${fmtUsdAmount(usage.api.costUsd)}/${fmtUsdAmount(includedApiUsd)}`,
+              percentRemaining: 100 - (usage.api.costUsd / includedApiUsd) * 100,
+              resetTimeIso: usage.window.resetTimeIso,
+            },
+      );
+    } else {
+      entries.push({
+        kind: "value",
+        name: "Cursor",
+        group,
+        label: "Usage:",
+        value: `${fmtUsdAmount(usage.total.costUsd)} used this cycle`,
+        resetTimeIso: usage.window.resetTimeIso,
+      });
+    }
+
+    if (usage.autoComposer.messageCount > 0 || includedApiUsd !== undefined) {
+      entries.push({
+        kind: "value",
+        name: "Cursor Auto+Composer",
+        group,
+        label: "Auto+Composer:",
+        value: `${fmtUsdAmount(usage.autoComposer.costUsd)} used`,
+        resetTimeIso: usage.window.resetTimeIso,
+      });
+    }
+
+    return attemptedResult(entries, errors);
+  },
+};

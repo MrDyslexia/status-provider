@@ -1,0 +1,19 @@
+FROM localhost/vforge-sandbox
+
+RUN bun add -g @opencode-ai/plugin
+
+COPY ttyd /usr/local/bin/ttyd
+RUN chmod +x /usr/local/bin/ttyd
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENV HOME=/sandbox
+WORKDIR /project
+EXPOSE 3002
+
+ENTRYPOINT ["ttyd", \
+  "--port", "3002", \
+  "--interface", "0.0.0.0", \
+  "--writable", \
+  "/usr/local/bin/entrypoint.sh"]

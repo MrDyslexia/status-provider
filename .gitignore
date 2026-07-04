@@ -1,0 +1,37 @@
+node_modules/
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
+
+# Build / tooling artifacts
+*.tsbuildinfo
+coverage/
+.pnpm-store/
+
+# Local-only config/secrets
+.env
+.env.*
+.npmrc
+opencode.json
+tui.json
+
+# Local scratch & AI Slop
+references/*
+!references/upstream-plugins/
+!references/upstream-plugins/**
+.git.backup-*/
+docs/
+AGENTS.md
+/images
+/.agents
+/prompt-exports
+/status-provider
+validation/sandbox-state/

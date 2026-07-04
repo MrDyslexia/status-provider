@@ -1,0 +1,81 @@
+name: Bug report
+description: Report a reproducible bug in status-provider
+title: "[bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug. Please include enough detail to reproduce the issue.
+        Review `CONTRIBUTING.md` before submitting.
+        Inactive issues may be marked stale after 23 days and closed 7 days later if there are still no updates.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I verified this on the current production released OpenCode version, or I explain why not below.
+          required: true
+
+  - type: input
+    id: opencode_version
+    attributes:
+      label: OpenCode version tested
+      description: Example `1.2.15`
+      placeholder: 1.2.15
+    validations:
+      required: true
+
+  - type: input
+    id: plugin_version
+    attributes:
+      label: status-provider version tested
+      description: Example `2.2.1` or `main@<commit>`
+      placeholder: 2.2.1
+    validations:
+      required: true
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Bug summary
+      description: Short description of what is broken.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include exact commands, slash commands, and config snippets.
+      placeholder: |
+        1. Configure ...
+        2. Run ...
+        3. Observe ...
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs/output
+      description: "Optional: paste `/status-provider-info` output (add test output if helpful)."
+      render: shell
+
+  - type: textarea
+    id: no_latest_reason
+    attributes:
+      label: If not tested on current production OpenCode, explain why
+      description: Leave blank if you tested on the current release.

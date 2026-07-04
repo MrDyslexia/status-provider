@@ -10,13 +10,27 @@ Initial independent release line: `0.1.x`.
 
 This project is a clean-history successor derived from prior fork work, but it is maintained as an independent project with its own package identity, config path, commands, docs, and release policy.
 
-## Install
+## First Steps
 
-Publishing is prepared but not active yet. For local development, run from the repository root:
+### Local install
 
 ```bash
 bun install
 bun run build
+```
+
+### Quick config
+
+```bash
+status-provider config
+```
+
+### Inside container
+
+Use this when working from `plugin-status-provider`:
+
+```bash
+bun /plugin/status-provider/dist/bin/status-provider.js config
 ```
 
 ## CLI

@@ -93,7 +93,7 @@ export interface StatusProviderConfig {
   enabledProviders: string[] | "auto";
 
   /**
-   * Explicit display order for providers in toast, sidebar and /status output.
+   * Explicit display order for providers in toast, sidebar and /status-provider output.
    *
    * Providers not listed here are appended in their default registry order.
    * This also implicitly disables any provider that is not present in the list
@@ -138,7 +138,7 @@ export interface StatusProviderConfig {
    * If true, show the Session input/output tokens section in status displays when session token data is available.
    * "allWindows" keeps per-model rows on toast + sidebar; "singleWindow"
    * uses a one-line total summary.
-   * The `/status` command keeps its detailed per-model rendering.
+   * The `/status-provider` command keeps its detailed per-model rendering.
    */
   showSessionTokens: boolean;
 

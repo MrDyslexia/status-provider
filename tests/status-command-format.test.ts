@@ -7,7 +7,7 @@ describe("formatStatusCommand", () => {
     vi.useRealTimers();
   });
 
-  it("documents the main /status printout combinations used by the default command output", () => {
+  it("documents the main /status-provider printout combinations used by the default command output", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-15T12:00:00.000Z"));
 
@@ -63,7 +63,7 @@ describe("formatStatusCommand", () => {
     });
 
     const lines = out.split("\n");
-    expect(lines[0]).toMatch(/^# Status \(\/status\) \d{2}:\d{2} \d{2}\/\d{2}\/\d{4}$/);
+    expect(lines[0]).toMatch(/^# Status \(\/status-provider\) \d{2}:\d{2} \d{2}\/\d{2}\/\d{4}$/);
     expect(lines[1]).toBe("");
     expect(lines.slice(2).join("\n")).toMatchInlineSnapshot(`
       "→ [Copilot] (personal)
@@ -87,7 +87,7 @@ describe("formatStatusCommand", () => {
     `);
   });
 
-  it("renders grouped /status windows shortest to longest within a provider group", () => {
+  it("renders grouped /status-provider windows shortest to longest within a provider group", () => {
     const out = formatStatusCommand({
       entries: [
         {
@@ -120,7 +120,7 @@ describe("formatStatusCommand", () => {
     expect(out.indexOf("Weekly:")).toBeLessThan(out.indexOf("Code Review:"));
   });
 
-  it("locks rendered grouped /status ordering for Qwen and OpenAI provider groups", () => {
+  it("locks rendered grouped /status-provider ordering for Qwen and OpenAI provider groups", () => {
     const out = formatStatusCommand({
       entries: [
         {
@@ -159,7 +159,7 @@ describe("formatStatusCommand", () => {
     expect(out.indexOf("5h:")).toBeLessThan(out.indexOf("Weekly:"));
   });
 
-  it("keeps /status reset formatting independent from compact toast resets", () => {
+  it("keeps /status-provider reset formatting independent from compact toast resets", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-15T10:00:00.000Z"));
 
@@ -176,11 +176,11 @@ describe("formatStatusCommand", () => {
       errors: [],
     });
 
-    // /status keeps its own formatter (hour-rounded here), not toast compact rounding.
+    // /status-provider keeps its own formatter (hour-rounded here), not toast compact rounding.
     expect(out).toContain("resets in 3h");
   });
 
-  it("sizes the grouped /status label column from the visible grouped text", () => {
+  it("sizes the grouped /status-provider label column from the visible grouped text", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-15T12:00:00.000Z"));
 

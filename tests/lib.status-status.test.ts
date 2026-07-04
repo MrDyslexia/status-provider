@@ -384,16 +384,25 @@ vi.mock("../src/lib/modelsdev-pricing.js", () => ({
   readPricingRefreshState: vi.fn(async () => null),
 }));
 
+const MOCK_PROVIDERS = [
+  { id: "copilot" },
+  { id: "cursor" },
+  { id: "synthetic" },
+  { id: "crof" },
+  { id: "nanogpt" },
+  { id: "kimi-for-coding" },
+  { id: "kimi-code" },
+];
+
 vi.mock("../src/providers/registry.js", () => ({
-  getProviders: () => [
-    { id: "copilot" },
-    { id: "cursor" },
-    { id: "synthetic" },
-    { id: "crof" },
-    { id: "nanogpt" },
-    { id: "kimi-for-coding" },
-    { id: "kimi-code" },
-  ],
+  getProviders: () => MOCK_PROVIDERS,
+  getOrderedProviders: (config: { enabledProviders: unknown }) => {
+    if (!config || config.enabledProviders === "auto") return MOCK_PROVIDERS;
+    const enabled = new Set(
+      Array.isArray(config.enabledProviders) ? config.enabledProviders : [],
+    );
+    return MOCK_PROVIDERS.filter((p: { id: string }) => enabled.has(p.id));
+  },
 }));
 
 vi.mock("../src/lib/version.js", () => ({

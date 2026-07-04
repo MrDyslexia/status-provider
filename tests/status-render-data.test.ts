@@ -9,6 +9,13 @@ const { mockProviders } = vi.hoisted(() => ({
 
 vi.mock("../src/providers/registry.js", () => ({
   getProviders: () => mockProviders,
+  getOrderedProviders: (config: { enabledProviders: unknown }) => {
+    if (!config || config.enabledProviders === "auto") return mockProviders;
+    const enabled = new Set(
+      Array.isArray(config.enabledProviders) ? config.enabledProviders : [],
+    );
+    return mockProviders.filter((p: { id: string }) => enabled.has(p.id));
+  },
 }));
 
 vi.mock("../src/lib/opencode-runtime-paths.js", () => ({

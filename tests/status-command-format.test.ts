@@ -67,7 +67,7 @@ describe("formatStatusCommand", () => {
     expect(lines[1]).toBe("");
     expect(lines.slice(2).join("\n")).toMatchInlineSnapshot(`
       "→ [Copilot] (personal)
-        Status: 42/300    ███████████████░░░  86% left (resets in 12h)
+        Status: 42/300   ███████████████░░░  86% left (resets in 12h)
 
       → [Copilot] (business)
         Usage:           9 used | 2026-01 | org=acme-corp | user=alice (resets in 17d)

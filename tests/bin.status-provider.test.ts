@@ -35,13 +35,13 @@ describe("status-provider bin", () => {
     expect(commandMocks.runCliShowCommand).not.toHaveBeenCalled();
   });
 
-  it("passes the legacy config sync option to init", async () => {
+  it("accepts removed legacy-sync flag without error", async () => {
     const { main } = await import("../src/bin/status-provider.js");
 
     const code = await main(["init", "--removed-legacy-sync"]);
 
     expect(code).toBe(0);
-    expect(commandMocks.runInitInstaller).toHaveBeenCalledWith({ syncLegacyConfig: true });
+    expect(commandMocks.runInitInstaller).toHaveBeenCalledOnce();
     expect(commandMocks.runCliShowCommand).not.toHaveBeenCalled();
   });
 

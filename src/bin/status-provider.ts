@@ -58,7 +58,9 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   }
 
   if (command === "init") {
-    if (rest.length === 0) {
+    // Accept --removed-legacy-sync silently for backward compat with old CLI usage.
+    const filteredRest = rest.filter((arg) => arg !== "--removed-legacy-sync");
+    if (filteredRest.length === 0) {
       return await runInitInstaller();
     }
   }

@@ -1964,20 +1964,20 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
       const cfg = input as PluginConfigInput;
       cfg.command ??= {};
       // Non-token commands (status toast and diagnostics)
-      cfg.command["status"] = {
-        template: "/status",
+      cfg.command["status-provider"] = {
+        template: "/status-provider",
         description: "Show status toast output in chat.",
       };
-  cfg.command["status-provider-info"] = {
-    template: "/status-provider-info",
-    description:
-      "Diagnostics for toast + TUI + pricing + local storage (includes unknown pricing report).",
-  };
-  cfg.command["status_config"] = {
-    template: "/status_config",
-    description: "Interactive wizard to configure enabled providers and display order.",
-  };
-  cfg.command["pricing_refresh"] = {
+      cfg.command["status-provider-info"] = {
+        template: "/status-provider-info",
+        description:
+          "Diagnostics for toast + TUI + pricing + local storage (includes unknown pricing report).",
+      };
+      cfg.command["status_config"] = {
+        template: "/status_config",
+        description: "Interactive wizard to configure enabled providers and display order.",
+      };
+      cfg.command["pricing_refresh"] = {
         template: "/pricing_refresh",
         description: "Refresh the local runtime pricing snapshot from models.dev.",
       };
@@ -2008,6 +2008,7 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
       try {
         const cmd = input.command;
         const isHandledSlashCommand =
+          cmd === "status-provider" ||
           cmd === "status" ||
           cmd === "status-provider-info" ||
           cmd === "status_config" ||
@@ -2021,7 +2022,7 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
           handled();
         }
 
-        if (cmd === "status") {
+        if (cmd === "status-provider" || cmd === "status") {
           return await handleStatusSlashCommand(input);
         }
 

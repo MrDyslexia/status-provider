@@ -1,5 +1,5 @@
 /**
- * Verbose status status formatter for /status.
+ * Verbose status status formatter for /status-provider.
  *
  * This is intentionally more verbose than the toast:
  * - Always shows reset countdown when available
@@ -17,7 +17,7 @@ import { buildSessionTokenSectionModel } from "./session-tokens-format.js";
 
 /**
  * Format reset time in compact form (different from toast countdown).
- * Uses seconds/minutes/hours/days format for /status command.
+ * Uses seconds/minutes/hours/days format for /status-provider command.
  */
 function formatResetTimeSeconds(diffSeconds: number): string {
   if (!Number.isFinite(diffSeconds) || diffSeconds <= 0) return "now";
@@ -104,7 +104,7 @@ function buildStatusCommandDocument(params: {
 
   return {
     heading: {
-      title: "Status (/status)",
+      title: "Status (/status-provider)",
       generatedAtMs: params.generatedAtMs,
     },
     sections,

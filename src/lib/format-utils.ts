@@ -4,7 +4,7 @@
  * These primitives are used by:
  * - format.ts (classic toast)
  * - toast-format-grouped.ts (grouped toast)
- * - status-command-format.ts (/status command)
+ * - status-command-format.ts (/status-provider command)
  */
 
 import type { PercentDisplayMode } from "./types.js";

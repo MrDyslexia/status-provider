@@ -188,25 +188,12 @@ export function extractProviderIdsFromParsedConfig(parsed: unknown): string[] {
 export function isStatusPluginSpec(spec: string, kind: ConfigFileKind): boolean {
   const normalized = spec.replace(/\\/g, "/").toLowerCase();
 
-  if (normalized.includes("@mrdyslexia/status-provider")) {
+  if (normalized === "status-provider" || normalized === "@mrdyslexia/status-provider") {
     return true;
   }
 
-  if (normalized.includes("status-provider")) {
-    return true;
-  }
+  const isServerEntrypoint = normalized.includes("status-provider/dist/index.js");
+  const isTuiEntrypoint = normalized.includes("status-provider/dist/tui.tsx");
 
-  if (normalized.includes("/status-provider") && !normalized.includes("/status-provider/dist/")) {
-    return true;
-  }
-
-  if (normalized.includes("/status-provider") && !normalized.includes("/status-provider/dist/")) {
-    return true;
-  }
-
-  return kind === "tui"
-    ? normalized.includes("status-provider/dist/tui.tsx") ||
-        normalized.includes("status-provider/dist/tui.tsx")
-    : normalized.includes("status-provider/dist/index.js") ||
-        normalized.includes("status-provider/dist/index.js");
+  return kind === "tui" ? isTuiEntrypoint : isServerEntrypoint;
 }

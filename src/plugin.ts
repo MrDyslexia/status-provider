@@ -385,7 +385,7 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
       // Log but don't fail - the tool output will still be returned
       await typedClient.app.log({
         body: {
-          service: "status-provider-config",
+          service: "status-provider",
           level: "warn",
           message: "Failed to inject raw output",
           extra: { error: err instanceof Error ? err.message : String(err) },
@@ -656,7 +656,7 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
     void typedClient.app
       .log({
         body: {
-          service: "status-provider-config",
+          service: "status-provider",
           level: "info",
           message: "plugin initialized",
           extra: {
@@ -691,7 +691,7 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
     try {
       await typedClient.app.log({
         body: {
-          service: "status-provider-config",
+          service: "status-provider",
           level: "debug",
           message,
           extra,
@@ -1401,7 +1401,7 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
       } catch (error) {
         await typedClient.app.log({
           body: {
-            service: "status-provider-config",
+            service: "status-provider",
             level: "warn",
             message: "Failed to collect /status-provider-info live probes",
             extra: {

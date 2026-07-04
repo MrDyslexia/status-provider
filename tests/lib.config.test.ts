@@ -224,10 +224,10 @@ describe("loadConfig", () => {
 
   it("resolves relative OPENCODE_CONFIG_DIR against cwd for file loading", async () => {
     process.env.OPENCODE_CONFIG_DIR = ".opencode";
-    mkdirSync(join(isolatedCwd, ".opencode"), { recursive: true });
+    mkdirSync(join(isolatedCwd, ".opencode", "status-provider"), { recursive: true });
     writeFileSync(
-      join(isolatedCwd, ".opencode", "opencode.json"),
-      JSON.stringify({ experimental: { statusProvider: { enabled: false } } }),
+      join(isolatedCwd, ".opencode", "status-provider", "config.json"),
+      JSON.stringify({ enabled: false }),
       "utf8",
     );
 
@@ -236,7 +236,7 @@ describe("loadConfig", () => {
 
     expect(config.enabled).toBe(false);
     expect(meta.paths).toContain(
-      `${join(isolatedCwd, ".opencode", "opencode.json")} (experimental.statusProvider)`,
+      `${join(isolatedCwd, ".opencode", "status-provider", "config.json")} (status-provider/config.json)`,
     );
   });
 
@@ -251,16 +251,13 @@ describe("loadConfig", () => {
     }
   });
 
-  it("records legacy OpenCode Go windows setting source when sidecar is absent", async () => {
-    const workspaceConfigPath = join(isolatedCwd, "opencode.json");
+  it("records OpenCode Go windows setting source from plugin-owned config", async () => {
+    const workspaceConfigPath = join(isolatedCwd, "status-provider", "config.json");
+    mkdirSync(join(isolatedCwd, "status-provider"), { recursive: true });
     writeFileSync(
       workspaceConfigPath,
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            opencodeGoWindows: ["weekly", "monthly"],
-          },
-        },
+        opencodeGoWindows: ["weekly", "monthly"],
       }),
       "utf8",
     );
@@ -271,16 +268,14 @@ describe("loadConfig", () => {
     expect(config.opencodeGoWindows).toEqual(["weekly", "monthly"]);
     expect(meta.source).toBe("files");
     expect(meta.settingSources).toEqual({
-      opencodeGoWindows: `${workspaceConfigPath} (experimental.statusProvider)`,
+      opencodeGoWindows: `${workspaceConfigPath} (status-provider/config.json)`,
     });
-    expect(existsSync(join(isolatedCwd, "status-provider", "config.json"))).toBe(false);
     expect(meta.networkSettingSources).toEqual({});
   });
 
-  it("falls back to legacy experimental.statusProvider without migrating on load", async () => {
+  it("ignores legacy experimental.statusProvider without migrating on load", async () => {
     const workspaceConfigPath = join(isolatedCwd, "opencode.json");
     const statusConfigPath = join(isolatedCwd, "status-provider", "config.json");
-    mkdirSync(join(isolatedCwd, "status-provider"), { recursive: true });
     writeFileSync(
       workspaceConfigPath,
       JSON.stringify({
@@ -298,16 +293,13 @@ describe("loadConfig", () => {
     const firstMeta = createLoadConfigMeta();
     const firstConfig = await loadConfig(undefined, firstMeta, { cwd: isolatedCwd });
 
-    expect(firstConfig.enabledProviders).toEqual(["openai"]);
-    expect(firstConfig.formatStyle).toBe("allWindows");
-    expect(firstConfig.pricingSnapshot.source).toBe("bundled");
+    expect(firstConfig.enabledProviders).toBe("auto");
+    expect(firstConfig.formatStyle).toBe("singleWindow");
+    expect(firstConfig.pricingSnapshot.source).toBe("auto");
     expect(existsSync(statusConfigPath)).toBe(false);
-    expect(firstMeta.settingSources.enabledProviders).toBe(
-      `${workspaceConfigPath} (experimental.statusProvider)`,
-    );
-    expect(firstMeta.paths).toEqual([
-      `${workspaceConfigPath} (experimental.statusProvider)`,
-    ]);
+    expect(firstMeta.source).toBe("defaults");
+    expect(firstMeta.settingSources).toEqual({});
+    expect(firstMeta.paths).toEqual([]);
   });
 
   it("prefers plugin-owned status settings over legacy experimental.statusProvider", async () => {
@@ -402,33 +394,28 @@ describe("loadConfig", () => {
     ]);
   });
 
-  it("falls back to split legacy json/jsonc settings using validated layer semantics", async () => {
-    const jsonPath = join(isolatedCwd, "opencode.json");
-    const jsoncPath = join(isolatedCwd, "opencode.jsonc");
-    const statusConfigPath = join(isolatedCwd, "status-provider", "config.json");
+  it("merges global and workspace plugin-owned settings using validated layer semantics", async () => {
+    const globalDir = join(isolatedCwd, "global-config");
+    const jsonPath = join(globalDir, "status-provider", "config.json");
+    const jsoncPath = join(isolatedCwd, "status-provider", "config.json");
+    runtimeDirs.value.configDirs = [globalDir];
+    mkdirSync(join(globalDir, "status-provider"), { recursive: true });
+    mkdirSync(join(isolatedCwd, "status-provider"), { recursive: true });
     writeFileSync(
       jsonPath,
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabledProviders: ["openai"],
-            pricingSnapshot: { source: "bundled" },
-            layout: { maxWidth: 64 },
-          },
-        },
+        enabledProviders: ["openai"],
+        pricingSnapshot: { source: "bundled" },
+        layout: { maxWidth: 64 },
       }),
       "utf8",
     );
     writeFileSync(
       jsoncPath,
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabledProviders: ["not-a-provider"],
-            pricingSnapshot: { autoRefresh: 2 },
-            layout: { narrowAt: 36 },
-          },
-        },
+        enabledProviders: ["not-a-provider"],
+        pricingSnapshot: { autoRefresh: 2 },
+        layout: { narrowAt: 36 },
       }),
       "utf8",
     );
@@ -439,17 +426,16 @@ describe("loadConfig", () => {
     expect(config.enabledProviders).toEqual(["openai"]);
     expect(config.pricingSnapshot).toEqual({ source: "bundled", autoRefresh: 2 });
     expect(config.layout).toEqual({ maxWidth: 64, narrowAt: 36, tinyAt: 32 });
-    expect(existsSync(statusConfigPath)).toBe(false);
     expect(meta.paths).toEqual([
-      `${jsonPath} (experimental.statusProvider)`,
-      `${jsoncPath} (experimental.statusProvider)`,
+      `${jsonPath} (status-provider/config.json)`,
+      `${jsoncPath} (status-provider/config.json)`,
     ]);
     expect(meta.settingSources.enabledProviders).toBe(
-      `${jsonPath} (experimental.statusProvider)`,
+      `${jsonPath} (status-provider/config.json)`,
     );
     expect(meta.configIssues).toEqual([
       {
-        path: `${jsoncPath} (experimental.statusProvider)`,
+        path: `${jsoncPath} (status-provider/config.json)`,
         key: "enabledProviders",
         message: "unknown provider id(s): not-a-provider",
       },
@@ -561,19 +547,16 @@ describe("loadConfig", () => {
     ]);
   });
 
-  it("keeps sdk fallback disabled once any file-backed experimental.statusProvider exists, even if it is invalid", async () => {
-    const workspaceConfigPath = join(isolatedCwd, "opencode.json");
+  it("keeps sdk fallback disabled once plugin-owned file-backed config exists, even if it is invalid", async () => {
+    const workspaceConfigPath = join(isolatedCwd, "status-provider", "config.json");
     const { writeFileSync } = await import("fs");
+    mkdirSync(join(isolatedCwd, "status-provider"), { recursive: true });
 
     writeFileSync(
       workspaceConfigPath,
       JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabledProviders: ["not-a-provider"],
-            pricingSnapshot: { source: "remote", autoRefresh: 0 },
-          },
-        },
+        enabledProviders: ["not-a-provider"],
+        pricingSnapshot: { source: "remote", autoRefresh: 0 },
       }),
       "utf8",
     );
@@ -603,9 +586,7 @@ describe("loadConfig", () => {
     expect(config.enabledProviders).toEqual([]);
     expect(config.formatStyle).toBe("singleWindow");
     expect(meta.source).toBe("files");
-    const statusConfigPath = join(isolatedCwd, "status-provider", "config.json");
-    const statusConfigSource = workspaceConfigPath + " (experimental.statusProvider)";
-    expect(existsSync(statusConfigPath)).toBe(false);
+    const statusConfigSource = workspaceConfigPath + " (status-provider/config.json)";
     expect(meta.paths).toEqual([statusConfigSource]);
     expect(meta.workspaceConfigPaths).toEqual(meta.paths);
     expect(meta.globalConfigPaths).toEqual([]);
@@ -614,7 +595,7 @@ describe("loadConfig", () => {
     });
     expect(meta.configIssues).toEqual([
       {
-        path: workspaceConfigPath + " (experimental.statusProvider)",
+        path: workspaceConfigPath + " (status-provider/config.json)",
         key: "enabledProviders",
         message: "unknown provider id(s): not-a-provider",
       },

@@ -19,7 +19,12 @@ vi.mock("../src/lib/opencode-runtime-paths.js", () => ({
 import { createLoadConfigMeta, loadConfig } from "../src/lib/config.js";
 
 function statusConfigSource(dir: string): string {
-  return join(dir, "opencode.json") + " (experimental.statusProvider)";
+  return join(dir, "status-provider", "config.json") + " (status-provider/config.json)";
+}
+
+function writeStatusConfig(dir: string, config: Record<string, unknown>): void {
+  mkdirSync(join(dir, "status-provider"), { recursive: true });
+  writeFileSync(join(dir, "status-provider", "config.json"), JSON.stringify(config), "utf-8");
 }
 
 describe("loadConfig layered precedence", () => {
@@ -62,48 +67,32 @@ describe("loadConfig layered precedence", () => {
   });
 
   it("lets workspace ordinary settings override global defaults while file-backed config still blocks sdk fallback", async () => {
-    writeFileSync(
-      join(xdgConfigHome, "opencode", "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: false,
-            enabledProviders: ["openai"],
-            showOnIdle: false,
-            showOnQuestion: false,
-            showOnCompact: false,
-            showOnBothFail: false,
-            minIntervalMs: 600000,
-            pricingSnapshot: { source: "bundled", autoRefresh: 30 },
-            formatStyle: "singleWindow",
-            percentDisplayMode: "remaining",
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(join(xdgConfigHome, "opencode"), {
+      enabled: false,
+      enabledProviders: ["openai"],
+      showOnIdle: false,
+      showOnQuestion: false,
+      showOnCompact: false,
+      showOnBothFail: false,
+      minIntervalMs: 600000,
+      pricingSnapshot: { source: "bundled", autoRefresh: 30 },
+      formatStyle: "singleWindow",
+      percentDisplayMode: "remaining",
+    });
 
-    writeFileSync(
-      join(workspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            enabledProviders: ["chutes"],
-            showOnIdle: true,
-            showOnQuestion: true,
-            showOnCompact: true,
-            showOnBothFail: true,
-            minIntervalMs: 1000,
-            pricingSnapshot: { source: "runtime", autoRefresh: 1 },
-            formatStyle: "allWindows",
-            percentDisplayMode: "used",
-            onlyCurrentModel: true,
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(workspaceDir, {
+      enabled: true,
+      enabledProviders: ["chutes"],
+      showOnIdle: true,
+      showOnQuestion: true,
+      showOnCompact: true,
+      showOnBothFail: true,
+      minIntervalMs: 1000,
+      pricingSnapshot: { source: "runtime", autoRefresh: 1 },
+      formatStyle: "allWindows",
+      percentDisplayMode: "used",
+      onlyCurrentModel: true,
+    });
 
     const cfg = await loadConfig({
       config: {
@@ -139,20 +128,12 @@ describe("loadConfig layered precedence", () => {
     const altWorkspaceDir = join(tempDir, "alt-workspace");
     mkdirSync(altWorkspaceDir, { recursive: true });
 
-    writeFileSync(
-      join(altWorkspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabledProviders: ["nano-gpt"],
-            formatStyle: "allWindows",
-            percentDisplayMode: "used",
-            onlyCurrentModel: true,
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(altWorkspaceDir, {
+      enabledProviders: ["nano-gpt"],
+      formatStyle: "allWindows",
+      percentDisplayMode: "used",
+      onlyCurrentModel: true,
+    });
 
     const meta = createLoadConfigMeta();
     const cfg = await loadConfig(undefined, meta, { cwd: altWorkspaceDir });
@@ -177,29 +158,13 @@ describe("loadConfig layered precedence", () => {
   });
 
   it("merges pricingSnapshot per field so global and workspace sources can coexist", async () => {
-    writeFileSync(
-      join(xdgConfigHome, "opencode", "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            pricingSnapshot: { source: "bundled" },
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(join(xdgConfigHome, "opencode"), {
+      pricingSnapshot: { source: "bundled" },
+    });
 
-    writeFileSync(
-      join(workspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            pricingSnapshot: { autoRefresh: 2 },
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(workspaceDir, {
+      pricingSnapshot: { autoRefresh: 2 },
+    });
 
     const meta = createLoadConfigMeta();
     const cfg = await loadConfig(undefined, meta, { cwd: workspaceDir });
@@ -214,29 +179,13 @@ describe("loadConfig layered precedence", () => {
   });
 
   it("merges layout per field so global and workspace sources can coexist", async () => {
-    writeFileSync(
-      join(xdgConfigHome, "opencode", "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            layout: { maxWidth: 72, narrowAt: 40 },
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(join(xdgConfigHome, "opencode"), {
+      layout: { maxWidth: 72, narrowAt: 40 },
+    });
 
-    writeFileSync(
-      join(workspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            layout: { narrowAt: 36, tinyAt: 24 },
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(workspaceDir, {
+      layout: { narrowAt: 36, tinyAt: 24 },
+    });
 
     const meta = createLoadConfigMeta();
     const cfg = await loadConfig(undefined, meta, { cwd: workspaceDir });
@@ -254,33 +203,13 @@ describe("loadConfig layered precedence", () => {
   });
 
   it("merges tuiSidebarPanel enabled per layer and ignores invalid workspace fields", async () => {
-    writeFileSync(
-      join(xdgConfigHome, "opencode", "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            tuiSidebarPanel: {
-              enabled: false,
-            },
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(join(xdgConfigHome, "opencode"), {
+      tuiSidebarPanel: { enabled: false },
+    });
 
-    writeFileSync(
-      join(workspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            tuiSidebarPanel: {
-              enabled: "yes",
-            },
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(workspaceDir, {
+      tuiSidebarPanel: { enabled: "yes" },
+    });
 
     const meta = createLoadConfigMeta();
     const cfg = await loadConfig(undefined, meta, { cwd: workspaceDir });
@@ -292,37 +221,13 @@ describe("loadConfig layered precedence", () => {
   });
 
   it("merges tuiCompactStatus per field and ignores invalid workspace fields", async () => {
-    writeFileSync(
-      join(xdgConfigHome, "opencode", "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            tuiCompactStatus: {
-              enabled: true,
-              sessionPrompt: false,
-              maxWidth: 80,
-            },
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(join(xdgConfigHome, "opencode"), {
+      tuiCompactStatus: { enabled: true, sessionPrompt: false, maxWidth: 80 },
+    });
 
-    writeFileSync(
-      join(workspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            tuiCompactStatus: {
-              homeBottom: false,
-              suppressWhenNativeProviderStatus: false,
-              maxWidth: 0,
-            },
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(workspaceDir, {
+      tuiCompactStatus: { homeBottom: false, suppressWhenNativeProviderStatus: false, maxWidth: 0 },
+    });
 
     const meta = createLoadConfigMeta();
     const cfg = await loadConfig(undefined, meta, { cwd: workspaceDir });
@@ -352,43 +257,27 @@ describe("loadConfig layered precedence", () => {
   });
 
   it("preserves the previous valid layer when workspace values are invalid", async () => {
-    writeFileSync(
-      join(xdgConfigHome, "opencode", "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabledProviders: ["openai"],
-            anthropicBinaryPath: "/usr/local/bin/claude",
-            googleModels: ["CLAUDE", "G3PRO"],
-            cursorIncludedApiUsd: 42,
-            cursorBillingCycleStartDay: 7,
-            pricingSnapshot: { source: "bundled", autoRefresh: 30 },
-            formatStyle: "allWindows",
-            layout: { maxWidth: 64, narrowAt: 40 },
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(join(xdgConfigHome, "opencode"), {
+      enabledProviders: ["openai"],
+      anthropicBinaryPath: "/usr/local/bin/claude",
+      googleModels: ["CLAUDE", "G3PRO"],
+      cursorIncludedApiUsd: 42,
+      cursorBillingCycleStartDay: 7,
+      pricingSnapshot: { source: "bundled", autoRefresh: 30 },
+      formatStyle: "allWindows",
+      layout: { maxWidth: 64, narrowAt: 40 },
+    });
 
-    writeFileSync(
-      join(workspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabledProviders: ["not-a-provider"],
-            anthropicBinaryPath: "   ",
-            googleModels: [],
-            cursorIncludedApiUsd: 0,
-            cursorBillingCycleStartDay: 31,
-            pricingSnapshot: { source: "remote", autoRefresh: 0 },
-            formatStyle: "bad-style",
-            layout: { maxWidth: -1, narrowAt: 35 },
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(workspaceDir, {
+      enabledProviders: ["not-a-provider"],
+      anthropicBinaryPath: "   ",
+      googleModels: [],
+      cursorIncludedApiUsd: 0,
+      cursorBillingCycleStartDay: 31,
+      pricingSnapshot: { source: "remote", autoRefresh: 0 },
+      formatStyle: "bad-style",
+      layout: { maxWidth: -1, narrowAt: 35 },
+    });
 
     const meta = createLoadConfigMeta();
     const cfg = await loadConfig(undefined, meta, { cwd: workspaceDir });
@@ -434,69 +323,28 @@ describe("loadConfig layered precedence", () => {
     );
   });
 
-  it("accepts legacy toastStyle in file-backed config and still prefers formatStyle when present", async () => {
+  it("accepts toastStyle alias in file-backed config and still prefers formatStyle when present", async () => {
     const legacyWorkspaceDir = join(tempDir, "legacy-workspace");
     mkdirSync(legacyWorkspaceDir, { recursive: true });
 
-    writeFileSync(
-      join(legacyWorkspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            toastStyle: "grouped",
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(legacyWorkspaceDir, { toastStyle: "grouped" });
 
     let cfg = await loadConfig(undefined, undefined, { cwd: legacyWorkspaceDir });
     expect(cfg.formatStyle).toBe("allWindows");
 
-    writeFileSync(
-      join(legacyWorkspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            toastStyle: "classic",
-            formatStyle: "allWindows",
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(legacyWorkspaceDir, { toastStyle: "classic", formatStyle: "allWindows" });
 
     cfg = await loadConfig(undefined, undefined, { cwd: legacyWorkspaceDir });
     expect(cfg.formatStyle).toBe("allWindows");
   });
 
-  it("lets a workspace legacy toastStyle override a global canonical formatStyle", async () => {
+  it("lets a workspace toastStyle alias override a global canonical formatStyle", async () => {
     const mixedWorkspaceDir = join(tempDir, "mixed-style-workspace");
     mkdirSync(mixedWorkspaceDir, { recursive: true });
 
-    writeFileSync(
-      join(xdgConfigHome, "opencode", "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            formatStyle: "allWindows",
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(join(xdgConfigHome, "opencode"), { formatStyle: "allWindows" });
 
-    writeFileSync(
-      join(mixedWorkspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            toastStyle: "classic",
-          },
-        },
-      }),
-      "utf-8",
-    );
+    writeStatusConfig(mixedWorkspaceDir, { toastStyle: "classic" });
 
     const cfg = await loadConfig(undefined, undefined, { cwd: mixedWorkspaceDir });
     expect(cfg.formatStyle).toBe("singleWindow");

@@ -31,7 +31,7 @@ import type { StatusProviderConfig } from "./types.js";
 const STATUS_PLUGIN_SPEC = "status-provider";
 const OPENCODE_SCHEMA_URL = "https://opencode.ai/config.json";
 const TUI_SCHEMA_URL = "https://opencode.ai/tui.json";
-const GITHUB_REPO_URL = "https://github.com/slkiser/status-provider";
+const GITHUB_REPO_URL = "https://github.com/MrDyslexia/status-provider";
 const GITHUB_STAR_NOTE = `if this helps, stars are appreciated: ${GITHUB_REPO_URL}`;
 
 export type InitInstallerScope = "project" | "global";

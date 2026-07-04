@@ -25,7 +25,12 @@ import { createLoadConfigMeta } from "../src/lib/config.js";
 import { DEFAULT_CONFIG } from "../src/lib/types.js";
 
 function statusConfigSource(dir: string): string {
-  return join(dir, "opencode.json") + " (experimental.statusProvider)";
+  return join(dir, "status-provider", "config.json") + " (status-provider/config.json)";
+}
+
+function writeStatusConfig(dir: string, config: Record<string, unknown>): void {
+  mkdirSync(join(dir, "status-provider"), { recursive: true });
+  writeFileSync(join(dir, "status-provider", "config.json"), JSON.stringify(config), "utf8");
 }
 
 describe("status runtime context", () => {
@@ -92,29 +97,9 @@ describe("status runtime context", () => {
   });
 
   it("loads config from the resolved shared config root", async () => {
-    writeFileSync(
-      join(worktreeDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: false,
-          },
-        },
-      }),
-      "utf8",
-    );
+    writeStatusConfig(worktreeDir, { enabled: false });
 
-    writeFileSync(
-      join(nestedDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-          },
-        },
-      }),
-      "utf8",
-    );
+    writeStatusConfig(nestedDir, { enabled: true });
 
     const runtime = await resolveStatusRuntimeContext({
       client: createClient(),
@@ -145,28 +130,8 @@ describe("status runtime context", () => {
   it("does not re-resolve OPENCODE_CONFIG_DIR when loadConfig receives resolved configRootDir", async () => {
     process.env.OPENCODE_CONFIG_DIR = ".opencode";
     mkdirSync(join(worktreeDir, ".opencode", ".opencode"), { recursive: true });
-    writeFileSync(
-      join(worktreeDir, ".opencode", "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: false,
-          },
-        },
-      }),
-      "utf8",
-    );
-    writeFileSync(
-      join(worktreeDir, ".opencode", ".opencode", "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-          },
-        },
-      }),
-      "utf8",
-    );
+    writeStatusConfig(join(worktreeDir, ".opencode"), { enabled: false });
+    writeStatusConfig(join(worktreeDir, ".opencode", ".opencode"), { enabled: true });
 
     const runtime = await resolveStatusRuntimeContext({
       client: createClient(),
@@ -219,18 +184,7 @@ describe("status runtime context", () => {
   });
 
   it("resolves session meta only when the shared config requests it", async () => {
-    writeFileSync(
-      join(nestedDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            onlyCurrentModel: true,
-          },
-        },
-      }),
-      "utf8",
-    );
+    writeStatusConfig(nestedDir, { enabled: true, onlyCurrentModel: true });
 
     const resolveSessionMeta = vi.fn().mockResolvedValue({
       providerID: "copilot",

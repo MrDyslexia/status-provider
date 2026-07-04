@@ -116,13 +116,12 @@ describe("init installer planning and merge behavior", () => {
     });
   });
 
-  it("writes legacy experimental.statusProvider only when explicitly requested", async () => {
+  it("does not write legacy experimental.statusProvider", async () => {
     const projectDir = join(tempDir, "project");
     mkdirSync(projectDir, { recursive: true });
 
     const plan = await planInitInstaller({
       cwd: projectDir,
-      syncLegacyConfig: true,
       selections: {
         scope: "project",
         statusUi: ["toast"],
@@ -135,16 +134,14 @@ describe("init installer planning and merge behavior", () => {
     });
 
     const opencodeEdit = plan.edits.find((edit) => edit.kind === "opencode");
-    expect(opencodeEdit?.addedKeys).toContain(
-      "experimental.statusProvider (synced from status-provider/config.json)",
-    );
+    expect(opencodeEdit?.addedKeys).not.toContain("experimental.statusProvider");
 
     await applyInitInstallerPlan(plan);
 
     const opencode = readJson(join(projectDir, "opencode.json"));
     const statusConfig = readJson(join(projectDir, "status-provider", "config.json"));
-    expect(opencode.experimental.statusProvider).toMatchObject(statusConfig);
-    expect(opencode.experimental.statusProvider).toMatchObject({
+    expect(opencode.experimental).toBeUndefined();
+    expect(statusConfig).toMatchObject({
       enableToast: true,
       enabledProviders: ["openai"],
       formatStyle: "allWindows",
@@ -222,18 +219,17 @@ describe("init installer planning and merge behavior", () => {
     const statusEdit = plan.edits.find((edit) => edit.kind === "status");
     expect(statusEdit?.addedKeys).toEqual(
       expect.arrayContaining([
-        "status-provider/config.json (seeded from experimental.statusProvider)",
+        "status-provider/config.json",
+        "statusProvider.enableToast",
+        "statusProvider.showSessionTokens",
+        "statusProvider.enabledProviders",
         "statusProvider.formatStyle",
         "statusProvider.percentDisplayMode",
+        "statusProvider.tuiSidebarPanel.enabled",
       ]),
     );
-    expect(statusEdit?.updatedKeys).toContain("statusProvider.enableToast");
-    expect(statusEdit?.skippedValues).toEqual(
-      expect.arrayContaining([
-        "statusProvider.showSessionTokens preserved existing value",
-        "statusProvider.enabledProviders preserved existing value",
-      ]),
-    );
+    expect(statusEdit?.updatedKeys).toEqual([]);
+    expect(statusEdit?.skippedValues).toEqual([]);
     expect(tuiEdit?.addedPlugins).toEqual([]);
     expect(tuiEdit?.skippedValues).toContain("tui config already includes status-provider");
 
@@ -251,12 +247,11 @@ describe("init installer planning and merge behavior", () => {
     expect(opencode.experimental.statusProvider.formatStyle).toBeUndefined();
     const statusConfig = readJson(join(projectDir, "status-provider", "config.json"));
     expect(statusConfig).toMatchObject({
-      toastStyle: "grouped",
-      formatStyle: "allWindows",
+      formatStyle: "singleWindow",
       percentDisplayMode: "remaining",
       enableToast: false,
-      showSessionTokens: true,
-      enabledProviders: ["openai"],
+      showSessionTokens: false,
+      enabledProviders: ["cursor", "opencode-go"],
     });
 
     const tui = readJson(join(projectDir, "tui.json"));
@@ -614,13 +609,12 @@ describe("init installer planning and merge behavior", () => {
     expect(statusConfig.enableToast).toBe(true);
   });
 
-  it("maps legacy compact session-prompt config to compact sync when requested", async () => {
+  it("maps legacy compact session-prompt selection to plugin-owned compact config", async () => {
     const projectDir = join(tempDir, "project");
     mkdirSync(projectDir, { recursive: true });
 
     const plan = await planInitInstaller({
       cwd: projectDir,
-      syncLegacyConfig: true,
       selections: {
         scope: "project",
         statusUi: ["toast", "sidebar"],
@@ -643,7 +637,7 @@ describe("init installer planning and merge behavior", () => {
     const statusConfig = readJson(join(projectDir, "status-provider", "config.json"));
     const opencode = readJson(join(projectDir, "opencode.json"));
     expect(statusConfig.tuiCompactStatus.sessionPrompt).toBe(true);
-    expect(opencode.experimental.statusProvider.tuiCompactStatus).toEqual(statusConfig.tuiCompactStatus);
+    expect(opencode.experimental).toBeUndefined();
   });
 
   it("updates installer-owned compact config values and preserves custom fields", async () => {
@@ -817,7 +811,7 @@ describe("init installer planning and merge behavior", () => {
 
     expect(code).toBe(0);
     expect(prompts.outroCalls).toContain(
-      "Status init complete — if this helps, stars are appreciated: https://github.com/slkiser/status-provider",
+      "Status init complete — if this helps, stars are appreciated: https://github.com/MrDyslexia/status-provider",
     );
     expect(prompts.multiselectCalls[0]).toMatchObject({
       message: "Status UI",

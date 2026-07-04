@@ -95,7 +95,7 @@ jobs:
               "",
               guidance,
               "",
-              "You can open a new issue here: https://github.com/slkiser/status-provider/issues/new/choose"
+              "You can open a new issue here: https://github.com/MrDyslexia/status-provider/issues/new/choose"
             ].join("\n");
 
             await github.rest.issues.createComment({

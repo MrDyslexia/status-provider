@@ -604,23 +604,23 @@ describe("buildStatusStatusReport", () => {
     const report = await buildStatusStatusReport({
       configSource: "files",
       configPaths: [
-        "/tmp/config/opencode.json (experimental.statusProvider)",
-        "/tmp/project/opencode.jsonc (experimental.statusProvider)",
+        "/tmp/config/status-provider/config.json (status-provider/config.json)",
+        "/tmp/project/status-provider/config.json (status-provider/config.json)",
       ],
-      globalConfigPaths: ["/tmp/config/opencode.json (experimental.statusProvider)"],
-      workspaceConfigPaths: ["/tmp/project/opencode.jsonc (experimental.statusProvider)"],
+      globalConfigPaths: ["/tmp/config/status-provider/config.json (status-provider/config.json)"],
+      workspaceConfigPaths: ["/tmp/project/status-provider/config.json (status-provider/config.json)"],
       settingSources: {
-        enabled: "/tmp/config/opencode.json (experimental.statusProvider)",
-        enableToast: "/tmp/config/opencode.json (experimental.statusProvider)",
-        minIntervalMs: "/tmp/project/opencode.jsonc (experimental.statusProvider)",
-        enabledProviders: "/tmp/project/opencode.jsonc (experimental.statusProvider)",
-        "pricingSnapshot.source": "/tmp/config/opencode.json (experimental.statusProvider)",
-        "pricingSnapshot.autoRefresh": "/tmp/project/opencode.jsonc (experimental.statusProvider)",
-        showOnIdle: "/tmp/config/opencode.json (experimental.statusProvider)",
-        showOnQuestion: "/tmp/project/opencode.jsonc (experimental.statusProvider)",
-        showOnCompact: "/tmp/project/opencode.jsonc (experimental.statusProvider)",
-        showOnBothFail: "/tmp/config/opencode.json (experimental.statusProvider)",
-        "layout.maxWidth": "/tmp/project/opencode.jsonc (experimental.statusProvider)",
+        enabled: "/tmp/config/status-provider/config.json (status-provider/config.json)",
+        enableToast: "/tmp/config/status-provider/config.json (status-provider/config.json)",
+        minIntervalMs: "/tmp/project/status-provider/config.json (status-provider/config.json)",
+        enabledProviders: "/tmp/project/status-provider/config.json (status-provider/config.json)",
+        "pricingSnapshot.source": "/tmp/config/status-provider/config.json (status-provider/config.json)",
+        "pricingSnapshot.autoRefresh": "/tmp/project/status-provider/config.json (status-provider/config.json)",
+        showOnIdle: "/tmp/config/status-provider/config.json (status-provider/config.json)",
+        showOnQuestion: "/tmp/project/status-provider/config.json (status-provider/config.json)",
+        showOnCompact: "/tmp/project/status-provider/config.json (status-provider/config.json)",
+        showOnBothFail: "/tmp/config/status-provider/config.json (status-provider/config.json)",
+        "layout.maxWidth": "/tmp/project/status-provider/config.json (status-provider/config.json)",
       },
       tuiDiagnostics: {
         workspaceRoot: "/tmp/workspace",
@@ -655,17 +655,17 @@ describe("buildStatusStatusReport", () => {
       "- opencode_dirs: data=/tmp/data config=/tmp/config cache=/tmp/cache state=/tmp/state",
     );
     expect(report).toContain(
-      "- configPaths: /tmp/config/opencode.json (experimental.statusProvider) | /tmp/project/opencode.jsonc (experimental.statusProvider)",
+      "- configPaths: /tmp/config/status-provider/config.json (status-provider/config.json) | /tmp/project/status-provider/config.json (status-provider/config.json)",
     );
     expect(report).toContain("- precedence: global defaults -> workspace overrides");
     expect(report).toContain(
-      "- global_config_paths: /tmp/config/opencode.json (experimental.statusProvider)",
+      "- global_config_paths: /tmp/config/status-provider/config.json (status-provider/config.json)",
     );
     expect(report).toContain(
-      "- workspace_config_paths: /tmp/project/opencode.jsonc (experimental.statusProvider)",
+      "- workspace_config_paths: /tmp/project/status-provider/config.json (status-provider/config.json)",
     );
     expect(report).toContain(
-      "- setting_sources: enabled<=/tmp/config/opencode.json (experimental.statusProvider) | enableToast<=/tmp/config/opencode.json (experimental.statusProvider) | minIntervalMs<=/tmp/project/opencode.jsonc (experimental.statusProvider) | enabledProviders<=/tmp/project/opencode.jsonc (experimental.statusProvider) | pricingSnapshot.source<=/tmp/config/opencode.json (experimental.statusProvider) | pricingSnapshot.autoRefresh<=/tmp/project/opencode.jsonc (experimental.statusProvider) | showOnIdle<=/tmp/config/opencode.json (experimental.statusProvider) | showOnQuestion<=/tmp/project/opencode.jsonc (experimental.statusProvider) | showOnCompact<=/tmp/project/opencode.jsonc (experimental.statusProvider) | showOnBothFail<=/tmp/config/opencode.json (experimental.statusProvider) | layout.maxWidth<=/tmp/project/opencode.jsonc (experimental.statusProvider)",
+      "- setting_sources: enabled<=/tmp/config/status-provider/config.json (status-provider/config.json) | enableToast<=/tmp/config/status-provider/config.json (status-provider/config.json) | minIntervalMs<=/tmp/project/status-provider/config.json (status-provider/config.json) | enabledProviders<=/tmp/project/status-provider/config.json (status-provider/config.json) | pricingSnapshot.source<=/tmp/config/status-provider/config.json (status-provider/config.json) | pricingSnapshot.autoRefresh<=/tmp/project/status-provider/config.json (status-provider/config.json) | showOnIdle<=/tmp/config/status-provider/config.json (status-provider/config.json) | showOnQuestion<=/tmp/project/status-provider/config.json (status-provider/config.json) | showOnCompact<=/tmp/project/status-provider/config.json (status-provider/config.json) | showOnBothFail<=/tmp/config/status-provider/config.json (status-provider/config.json) | layout.maxWidth<=/tmp/project/status-provider/config.json (status-provider/config.json)",
     );
     expect(report).toContain("tui:");
     expect(report).toContain("- workspace_root: /tmp/workspace");

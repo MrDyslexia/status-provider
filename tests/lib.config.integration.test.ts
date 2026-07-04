@@ -19,7 +19,12 @@ import { createLoadConfigMeta, loadConfig } from "../src/lib/config.js";
 import { getOpencodeRuntimeDirCandidates } from "../src/lib/opencode-runtime-paths.js";
 
 function statusConfigSource(dir: string): string {
-  return join(dir, "opencode.json") + " (experimental.statusProvider)";
+  return join(dir, "status-provider", "config.json") + " (status-provider/config.json)";
+}
+
+function writeStatusConfig(dir: string, config: Record<string, unknown>): void {
+  mkdirSync(join(dir, "status-provider"), { recursive: true });
+  writeFileSync(join(dir, "status-provider", "config.json"), JSON.stringify(config), "utf8");
 }
 
 describe("loadConfig integration runtime-path resolution", () => {
@@ -75,49 +80,22 @@ describe("loadConfig integration runtime-path resolution", () => {
     } as NodeJS.ProcessEnv;
     const { configDirs } = getOpencodeRuntimeDirCandidates({ env, homeDir: tempDir });
     for (const dir of configDirs) {
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(
-        join(dir, "opencode.json"),
-        JSON.stringify({
-          experimental: {
-            statusProvider: {
-              enabled: false,
-              enabledProviders: ["openai"],
-              showOnIdle: false,
-              pricingSnapshot: { source: "bundled", autoRefresh: 30 },
-            },
-          },
-        }),
-        "utf8",
-      );
+      writeStatusConfig(dir, {
+        enabled: false,
+        enabledProviders: ["openai"],
+        showOnIdle: false,
+        pricingSnapshot: { source: "bundled", autoRefresh: 30 },
+      });
     }
 
-    writeFileSync(
-      join(workspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            enabledProviders: ["nano-gpt"],
-            formatStyle: "allWindows",
-            onlyCurrentModel: true,
-          },
-        },
-      }),
-      "utf8",
-    );
+    writeStatusConfig(workspaceDir, {
+      enabled: true,
+      enabledProviders: ["nano-gpt"],
+      formatStyle: "allWindows",
+      onlyCurrentModel: true,
+    });
 
-    writeFileSync(
-      join(nestedDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabledProviders: ["chutes"],
-          },
-        },
-      }),
-      "utf8",
-    );
+    writeStatusConfig(nestedDir, { enabledProviders: ["chutes"] });
 
     const meta = createLoadConfigMeta();
     const cfg = await loadConfig(undefined, meta, { cwd: workspaceDir });
@@ -166,18 +144,7 @@ describe("loadConfig integration runtime-path resolution", () => {
   it("treats an overlapping configRootDir as the workspace layer instead of a duplicate global path", async () => {
     const overlappingRoot = join(xdgConfigHome, "opencode");
 
-    writeFileSync(
-      join(overlappingRoot, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: false,
-            minIntervalMs: 12_345,
-          },
-        },
-      }),
-      "utf8",
-    );
+    writeStatusConfig(overlappingRoot, { enabled: false, minIntervalMs: 12_345 });
 
     const meta = createLoadConfigMeta();
     const cfg = await loadConfig(undefined, meta, { configRootDir: overlappingRoot });
@@ -209,53 +176,28 @@ describe("loadConfig integration runtime-path resolution", () => {
     const { configDirs } = getOpencodeRuntimeDirCandidates({ env, homeDir: tempDir });
 
     for (const dir of configDirs) {
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(
-        join(dir, "opencode.json"),
-        JSON.stringify({
-          experimental: {
-            statusProvider: {
-              enabled: false,
-              enabledProviders: ["openai"],
-              minIntervalMs: 30_000,
-            },
-          },
-        }),
-        "utf8",
-      );
+      writeStatusConfig(dir, {
+        enabled: false,
+        enabledProviders: ["openai"],
+        minIntervalMs: 30_000,
+      });
     }
 
-    writeFileSync(
-      join(workspaceDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            enabledProviders: ["nano-gpt"],
-            minIntervalMs: 1_000,
-            formatStyle: "allWindows",
-            onlyCurrentModel: true,
-          },
-        },
-      }),
-      "utf8",
-    );
+    writeStatusConfig(workspaceDir, {
+      enabled: true,
+      enabledProviders: ["nano-gpt"],
+      minIntervalMs: 1_000,
+      formatStyle: "allWindows",
+      onlyCurrentModel: true,
+    });
 
-    writeFileSync(
-      join(nestedDir, "opencode.json"),
-      JSON.stringify({
-        experimental: {
-          statusProvider: {
-            enabled: true,
-            enabledProviders: ["chutes"],
-            minIntervalMs: 2_000,
-            formatStyle: "singleWindow",
-            onlyCurrentModel: false,
-          },
-        },
-      }),
-      "utf8",
-    );
+    writeStatusConfig(nestedDir, {
+      enabled: true,
+      enabledProviders: ["chutes"],
+      minIntervalMs: 2_000,
+      formatStyle: "singleWindow",
+      onlyCurrentModel: false,
+    });
 
     const workspaceMeta = createLoadConfigMeta();
     const workspaceCfg = await loadConfig(undefined, workspaceMeta, { configRootDir: workspaceDir });

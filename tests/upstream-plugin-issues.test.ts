@@ -34,7 +34,7 @@ describe("upstream-plugin-issues", () => {
       tracked,
     });
 
-    expect(body).toContain("pnpm run upstream:prepare-review");
+    expect(body).toContain("bun run upstream:prepare-review");
     expect(body).toContain("<!-- status-provider:plugin=opencode-qwencode-auth -->");
     expect(body).toContain("<!-- status-provider:issue-state=update_available -->");
     expect(body).toContain("<!-- status-provider:latest-version=1.3.0 -->");

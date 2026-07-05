@@ -6,38 +6,34 @@ on:
   pull_request:
 
 jobs:
-  pnpm-quality:
+  bun-quality:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Use Node.js 22.x
-        uses: actions/setup-node@v6
+      - name: Use Bun 1.3.4
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22.x
-
-      - name: Activate pnpm
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.0.0 --activate
+          bun-version: 1.3.4
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
 
       - name: Typecheck
-        run: pnpm run typecheck
+        run: bun run typecheck
 
       - name: Build
-        run: pnpm run build
+        run: bun run build
 
       - name: Test
-        run: pnpm test
+        run: bun run test
 
       - name: Pack
         run: |
+          bun pm pack
           mkdir -p package-artifacts
-          pnpm pack --pack-destination package-artifacts
+          mv ./*.tgz package-artifacts/
 
       - name: Upload package tarball
         uses: actions/upload-artifact@v4
@@ -48,7 +44,7 @@ jobs:
 
   runtime-smoke:
     runs-on: ubuntu-latest
-    needs: pnpm-quality
+    needs: bun-quality
 
     strategy:
       matrix:

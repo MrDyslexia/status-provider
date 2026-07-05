@@ -20,14 +20,13 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: 20
+          bun-version: 1.3.4
 
       - name: Reconcile upstream plugin issues
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/check-upstream-plugin-updates.mjs --write-issues
-
+        run: bun scripts/check-upstream-plugin-updates.mjs --write-issues

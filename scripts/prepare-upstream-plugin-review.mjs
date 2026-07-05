@@ -43,10 +43,10 @@ function normalizeExecOutput(errorOrResult) {
 }
 
 async function runPackageManagerCommand(args) {
-  const command = `pnpm ${args.join(" ")}`;
+  const command = `bun ${args.join(" ")}`;
 
   try {
-    const result = await execFileAsync("pnpm", args, {
+    const result = await execFileAsync("bun", args, {
       cwd: repoRoot,
       maxBuffer: 10 * 1024 * 1024,
     });
@@ -178,4 +178,3 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
-

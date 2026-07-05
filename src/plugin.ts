@@ -996,6 +996,11 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
         style: resolveStatusFormatStyle(runtimeConfig.formatStyle),
         percentDisplayMode: runtimeConfig.percentDisplayMode,
         sessionTokens: data?.sessionTokens,
+        textVariant: runtimeConfig.toastTextVariant,
+        providerNameVariant: runtimeConfig.toastProviderNameVariant,
+        percentVariant: runtimeConfig.toastPercentVariant,
+        colorVariant: runtimeConfig.toastColorVariant,
+        alignmentVariant: runtimeConfig.toastAlignmentVariant,
       });
 
       const retryableMaskedProviderFailure = !hasProviderStatusRows && providerFetchFailureOnly;
@@ -1536,6 +1541,17 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
     handled();
   }
 
+  async function handleStatusProviderToastSlashCommand(input: CommandExecuteInput): Promise<never> {
+    const sessionID = input.sessionID;
+    if (!configLoaded) {
+      await refreshConfig();
+    }
+    // Force-fetch and force-show, bypassing the normal cache/interval throttling
+    // so the popup toast appears immediately with fresh data.
+    await showStatusProvider(sessionID, "manual.toast", { deferredRetry: true });
+    return await injectCommandOutputAndHandle(sessionID);
+  }
+
   async function handleStatusSlashCommand(input: CommandExecuteInput): Promise<never> {
     const sessionID = input.sessionID;
     const generatedAtMs = Date.now();
@@ -1968,6 +1984,10 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
         template: "/status-provider",
         description: "Show status toast output in chat.",
       };
+      cfg.command["status-provider-toast"] = {
+        template: "/status-provider-toast",
+        description: "Force-show the actual popup toast right now (bypasses cache/interval).",
+      };
       cfg.command["status-provider-info"] = {
         template: "/status-provider-info",
         description:
@@ -2010,6 +2030,7 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
         const isHandledSlashCommand =
           cmd === "status-provider" ||
           cmd === "status" ||
+          cmd === "status-provider-toast" ||
           cmd === "status-provider-info" ||
           cmd === "status_config" ||
           cmd === "pricing_refresh" ||
@@ -2024,6 +2045,10 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
 
         if (cmd === "status-provider" || cmd === "status") {
           return await handleStatusSlashCommand(input);
+        }
+
+        if (cmd === "status-provider-toast") {
+          return await handleStatusProviderToastSlashCommand(input);
         }
 
         if (cmd === "status_config") {

@@ -63,7 +63,7 @@ function extractWindowLabel(text: string): string | null {
   if (!lower) return null;
 
   if (/\b(?:rpm|per minute|minute|minutes)\b/u.test(lower)) return "RPM";
-  if (/\b(?:rolling|5h|5 h|5-hour|5 hour|five-hour|five hour)\b/u.test(lower)) return "5h";
+  if (/\b(?:rolling|5h|5 h|5-hour|5 hour|five-hour|five hour)\b/u.test(lower)) return "Session";
   if (/\b(?:hourly|1h|1 h|1-hour|1 hour|hour)\b/u.test(lower)) return "Hourly";
   if (/\b(?:7d|7 d|7-day|7 day|weekly|week)\b/u.test(lower)) return "Weekly";
   if (/\b(?:daily|1d|1 d|1-day|1 day|day)\b/u.test(lower)) return "Daily";
@@ -78,13 +78,41 @@ function extractWindowLabel(text: string): string | null {
 function resolveGroupedRowLabel(entry: StatusProviderEntry): string {
   const rawLabel = normalizeLabelText(entry.label);
   const fromLabel = extractWindowLabel(rawLabel);
-  if (fromLabel) return `${fromLabel} window`;
+  if (fromLabel) return fromLabel;
   if (rawLabel) return rawLabel;
 
   const fromName = extractWindowLabel(entry.name);
-  if (fromName) return `${fromName} window`;
+  if (fromName) return fromName;
 
   return "Status window";
+}
+
+function buildGroupedBarLine(params: {
+  displayedPercent: number;
+  percentLabel: string;
+  right: string;
+  maxWidth: number;
+  separator: string;
+  percentCol: number;
+  preferredBarWidth: number;
+}): string {
+  const summaryMaxWidth = Math.max(
+    0,
+    params.maxWidth - params.separator.length - params.percentCol - params.separator.length - 10,
+  );
+  const summary = params.right ? params.right.slice(0, summaryMaxWidth) : "";
+  const summaryWidth = summary.length;
+  const barWidth = Math.max(
+    10,
+    params.maxWidth -
+      params.separator.length -
+      params.percentCol -
+      (summary ? params.separator.length + summaryWidth : 0),
+  );
+  const barCell = bar(params.displayedPercent, Math.min(params.preferredBarWidth, barWidth));
+  const percentCell = padLeft(params.percentLabel, params.percentCol);
+  const cells = summary ? [barCell, percentCell, summary] : [barCell, percentCell];
+  return cells.join(params.separator).slice(0, params.maxWidth);
 }
 
 export function formatStatusRowsGrouped(params: {
@@ -266,15 +294,23 @@ export function formatStatusRowsGrouped(params: {
         (padRight(leftLabel, leftMax) + separator + padLeft(timeStr, timeWidth)).slice(0, maxWidth),
       );
 
-      // Line 2: bar + percent / number / bar
+      // Line 2: bar + percent + right summary (when available)
       if (percentVariant === "number") {
         lines.push(percentLabel);
       } else if (percentVariant === "bar") {
         lines.push(bar(displayedPercent, barWidth));
       } else {
-        const barCell = bar(displayedPercent, barWidth);
-        const percentCell = padLeft(percentLabel, percentCol);
-        lines.push([barCell, percentCell].join(separator));
+        lines.push(
+          buildGroupedBarLine({
+            displayedPercent,
+            percentLabel,
+            right,
+            maxWidth,
+            separator,
+            percentCol,
+            preferredBarWidth: barWidth,
+          }),
+        );
       }
     }
   }

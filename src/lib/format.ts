@@ -116,6 +116,34 @@ function buildClassicValueLine(params: {
   ).slice(0, params.maxWidth);
 }
 
+function buildClassicBarLine(params: {
+  displayedPercent: number;
+  percentLabel: string;
+  rightSummary: string;
+  maxWidth: number;
+  separator: string;
+  percentCol: number;
+  preferredBarWidth: number;
+}): string {
+  const summaryMaxWidth = Math.max(
+    0,
+    params.maxWidth - params.separator.length - params.percentCol - params.separator.length - 10,
+  );
+  const summary = params.rightSummary ? params.rightSummary.slice(0, summaryMaxWidth) : "";
+  const summaryWidth = summary.length;
+  const barWidth = Math.max(
+    10,
+    params.maxWidth -
+      params.separator.length -
+      params.percentCol -
+      (summary ? params.separator.length + summaryWidth : 0),
+  );
+  const barCell = bar(params.displayedPercent, Math.min(params.preferredBarWidth, barWidth));
+  const percentCell = padLeft(params.percentLabel, params.percentCol);
+  const cells = summary ? [barCell, percentCell, summary] : [barCell, percentCell];
+  return cells.join(params.separator).slice(0, params.maxWidth);
+}
+
 export function formatStatusRows(params: {
   version: string;
   layout?: {
@@ -219,7 +247,7 @@ export function formatStatusRows(params: {
     const coloredPercentLabel = maybeColor(rawPercentLabel, displayedPercent, colorVariant);
     const summary = rightSummary?.trim() || "";
     const emoji = textVariant === "emoji" ? `${statusEmoji(remaining)} ` : "";
-    const leftText = summary ? `${emoji}${name} ${summary}` : `${emoji}${name}`;
+    const leftText = `${emoji}${name}`;
 
     const timeStr =
       remaining < 100 && textVariant !== "minimal"
@@ -258,16 +286,23 @@ export function formatStatusRows(params: {
       }),
     );
 
-    // Line 2: bar + percent (percent extends beyond bar width)
+    // Line 2: bar + percent + right summary (when available)
     if (percentVariant === "number") {
       lines.push(coloredPercentLabel);
     } else if (percentVariant === "bar") {
       lines.push(bar(displayedPercent, barWidth));
     } else {
-      const barCell = bar(displayedPercent, barWidth);
-      const percentCell = padLeft(coloredPercentLabel, percentCol);
-      const barLine = [barCell, percentCell].join(separator);
-      lines.push(barLine);
+      lines.push(
+        buildClassicBarLine({
+          displayedPercent,
+          percentLabel: coloredPercentLabel,
+          rightSummary: summary,
+          maxWidth,
+          separator,
+          percentCol,
+          preferredBarWidth: barWidth,
+        }),
+      );
     }
   };
 

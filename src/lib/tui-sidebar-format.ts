@@ -3,10 +3,13 @@ import type { StatusProviderConfig } from "./types.js";
 
 import { sanitizeStatusRenderData } from "./display-sanitize.js";
 import { formatStatusRows } from "./format.js";
+import { stripAnsi } from "./format-utils.js";
 
 export const TUI_SIDEBAR_MAX_WIDTH = 36;
+export const TUI_SIDEBAR_BAR_MAX_WIDTH = TUI_SIDEBAR_MAX_WIDTH;
 export const TUI_SIDEBAR_LAYOUT = {
   maxWidth: TUI_SIDEBAR_MAX_WIDTH,
+  barMaxWidth: TUI_SIDEBAR_BAR_MAX_WIDTH,
   narrowAt: TUI_SIDEBAR_MAX_WIDTH,
   tinyAt: 20,
 } as const;
@@ -40,5 +43,5 @@ export function buildSidebarStatusPanelLines(params: {
     colorVariant: params.config.colorVariant,
     alignmentVariant: params.config.alignmentVariant,
   });
-  return statusBody ? statusBody.split("\n") : [];
+  return statusBody ? statusBody.split("\n").map((line) => stripAnsi(line)) : [];
 }

@@ -12,9 +12,11 @@ import {
   DISPLAYED_PERCENT_LABEL_WIDTH,
   formatDisplayedPercentLabel,
   formatResetCountdown,
+  joinBarAndTrailingLabel,
   padLeft,
   padRight,
   resolveDisplayedPercent,
+  visibleLength,
 } from "./format-utils.js";
 import { formatStatusRowsGrouped } from "./toast-format-grouped.js";
 import {
@@ -116,38 +118,11 @@ function buildClassicValueLine(params: {
   ).slice(0, params.maxWidth);
 }
 
-function buildClassicBarLine(params: {
-  displayedPercent: number;
-  percentLabel: string;
-  rightSummary: string;
-  maxWidth: number;
-  separator: string;
-  percentCol: number;
-  preferredBarWidth: number;
-}): string {
-  const summaryMaxWidth = Math.max(
-    0,
-    params.maxWidth - params.separator.length - params.percentCol - params.separator.length - 10,
-  );
-  const summary = params.rightSummary ? params.rightSummary.slice(0, summaryMaxWidth) : "";
-  const summaryWidth = summary.length;
-  const barWidth = Math.max(
-    10,
-    params.maxWidth -
-      params.separator.length -
-      params.percentCol -
-      (summary ? params.separator.length + summaryWidth : 0),
-  );
-  const barCell = bar(params.displayedPercent, Math.min(params.preferredBarWidth, barWidth));
-  const percentCell = padLeft(params.percentLabel, params.percentCol);
-  const cells = summary ? [barCell, percentCell, summary] : [barCell, percentCell];
-  return cells.join(params.separator).slice(0, params.maxWidth);
-}
-
 export function formatStatusRows(params: {
   version: string;
   layout?: {
     maxWidth: number;
+    barMaxWidth?: number;
     narrowAt: number;
     tinyAt: number;
   };
@@ -187,7 +162,9 @@ export function formatStatusRows(params: {
 
   const layout = params.layout ?? { maxWidth: 50, narrowAt: 42, tinyAt: 32 };
   const totalMaxWidth = layout.maxWidth;
+  const barLineMaxWidth = Math.min(layout.barMaxWidth ?? totalMaxWidth, totalMaxWidth);
   const maxWidth = textVariant === "box" ? Math.max(10, totalMaxWidth - 4) : totalMaxWidth;
+  const barLineWidth = textVariant === "box" ? Math.max(10, barLineMaxWidth - 4) : barLineMaxWidth;
 
   // Responsive columns.
   // - default: name + time on one line, then bar on next line
@@ -240,18 +217,16 @@ export function formatStatusRows(params: {
     name: string,
     resetIso: string | undefined,
     remaining: number,
-    rightSummary?: string,
   ) => {
     const displayedPercent = resolveDisplayedPercent(remaining, params.percentDisplayMode);
     const rawPercentLabel = formatDisplayedPercentLabel(remaining, params.percentDisplayMode);
     const coloredPercentLabel = maybeColor(rawPercentLabel, displayedPercent, colorVariant);
-    const summary = rightSummary?.trim() || "";
     const emoji = textVariant === "emoji" ? `${statusEmoji(remaining)} ` : "";
     const leftText = `${emoji}${name}`;
 
     const timeStr =
       remaining < 100 && textVariant !== "minimal"
-        ? formatResetCountdown(resetIso, { missing: "-", compactRounded: true })
+        ? formatResetCountdown(resetIso, { missing: "-" })
         : "";
 
     if (textVariant === "minimal") {
@@ -286,31 +261,30 @@ export function formatStatusRows(params: {
       }),
     );
 
-    // Line 2: bar + percent + right summary (when available)
+    // Line 2: bar + percent label.
     if (percentVariant === "number") {
       lines.push(coloredPercentLabel);
-    } else if (percentVariant === "bar") {
-      lines.push(bar(displayedPercent, barWidth));
     } else {
-      lines.push(
-        buildClassicBarLine({
-          displayedPercent,
-          percentLabel: coloredPercentLabel,
-          rightSummary: summary,
-          maxWidth,
-          separator,
-          percentCol,
-          preferredBarWidth: barWidth,
-        }),
-      );
+      const trailingBarWidth = Math.max(10, barLineWidth - separator.length - visibleLength(coloredPercentLabel));
+      lines.push(joinBarAndTrailingLabel(bar(displayedPercent, trailingBarWidth), coloredPercentLabel, barLineWidth, separator));
     }
   };
 
   const addValueEntry = (name: string, resetIso: string | undefined, value: string) => {
-    const timeStr =
+    let timeStr =
       textVariant !== "minimal"
-        ? formatResetCountdown(resetIso, { missing: "-", compactRounded: true })
+        ? formatResetCountdown(resetIso, { missing: "-" })
         : "";
+
+    if (textVariant !== "minimal" && !isTiny && resetIso) {
+      const compactTimeStr = formatResetCountdown(resetIso, { missing: "-", compactRounded: true });
+      const fullWidth = name.length + separator.length + value.length + separator.length + timeStr.length;
+      const compactWidth =
+        name.length + separator.length + value.length + separator.length + compactTimeStr.length;
+      if (fullWidth > maxWidth && compactWidth <= maxWidth) {
+        timeStr = compactTimeStr;
+      }
+    }
 
     if (textVariant === "minimal") {
       addMinimalValueLine(name, value);
@@ -351,7 +325,7 @@ export function formatStatusRows(params: {
       addValueEntry(displayName, entry.resetTimeIso, entry.value);
     } else {
       const displayName = applyProviderNameVariant(entry, providerNameVariant);
-      addPercentEntry(displayName, entry.resetTimeIso, entry.percentRemaining, entry.right);
+      addPercentEntry(displayName, entry.resetTimeIso, entry.percentRemaining);
     }
   }
 

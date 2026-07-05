@@ -247,10 +247,11 @@ describe("buildSidebarStatusPanelLines", () => {
       },
     });
 
-    expect(lines.findIndex((line) => line.includes("5h window"))).toBeGreaterThanOrEqual(0);
-    expect(lines.findIndex((line) => line.includes("Weekly window"))).toBeGreaterThanOrEqual(0);
-    expect(lines.findIndex((line) => line.includes("5h window"))).toBeLessThan(
-      lines.findIndex((line) => line.includes("Weekly window")),
+    expect(lines.findIndex((line) => line.includes("Session"))).toBeGreaterThanOrEqual(0);
+    expect(lines.findIndex((line) => line.includes("Weekly"))).toBeGreaterThanOrEqual(0);
+    expect(lines.join("\n")).not.toContain("window");
+    expect(lines.findIndex((line) => line.includes("Session"))).toBeLessThan(
+      lines.findIndex((line) => line.includes("Weekly")),
     );
   });
 
@@ -274,7 +275,9 @@ describe("buildSidebarStatusPanelLines", () => {
     });
 
     const rendered = lines.join("\n");
-    expect(rendered).toContain("Weekly $22/$24");
+    expect(lines[0]).toContain("Weekly");
+    expect(lines[0]).not.toContain("$22/$24");
+    expect(lines[1]).toMatch(/^█+░*\s+92% used\s+\$22\/\$24$/u);
     expect(rendered).toContain("92% used");
     expect(rendered).not.toContain("0/500");
     expect(rendered).not.toContain("0% used");
@@ -303,8 +306,9 @@ describe("buildSidebarStatusPanelLines", () => {
 
     const rendered = lines.join("\n");
     expect(rendered).toContain("[Synthetic]");
-    expect(rendered).toContain("Weekly window");
-    expect(rendered).not.toContain("$22/$24");
+    expect(rendered).toContain("Weekly");
+    expect(rendered).not.toContain("Weekly window");
+    expect(lines[2]).toMatch(/^█+░*\s+92% used\s+\$22\/\$24$/u);
     expect(rendered).toContain("92% used");
     expect(rendered).not.toContain("0/500");
     expect(rendered).not.toContain("0% used");

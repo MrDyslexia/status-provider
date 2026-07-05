@@ -45,7 +45,8 @@ status-provider config --dry-run
 
 ## OpenCode Commands
 
-- `/status-provider` — provider status output
+- `/status-provider` — provider status output injected into chat
+- `/status-provider-toast` — force-show the actual popup toast right now, bypassing cache/interval
 - `/status-provider-info` — diagnostics, pricing, config paths, and provider availability
 
 ## Config
@@ -70,11 +71,18 @@ Example:
   "percentVariant": "both",
   "colorVariant": "none",
   "alignmentVariant": "left",
+  "toastTextVariant": "default",
+  "toastProviderNameVariant": "full",
+  "toastPercentVariant": "both",
+  "toastColorVariant": "none",
+  "toastAlignmentVariant": "left",
   "tuiSidebarPanel": {
     "enabled": true
   }
 }
 ```
+
+`textVariant`/`providerNameVariant`/`percentVariant`/`colorVariant`/`alignmentVariant` control the TUI sidebar panel and the `/status-provider` CLI/slash command output. The `toast*` counterparts control popup toasts independently — `status-provider config` can copy the sidebar choices as a starting point for the toast section, or configure it from scratch.
 
 Clean-start policy: `status-provider` does not migrate legacy config automatically.
 

@@ -76,6 +76,11 @@ interface PendingChanges {
   percentVariant?: StatusProviderConfig["percentVariant"];
   colorVariant?: StatusProviderConfig["colorVariant"];
   alignmentVariant?: StatusProviderConfig["alignmentVariant"];
+  toastTextVariant?: StatusProviderConfig["toastTextVariant"];
+  toastProviderNameVariant?: StatusProviderConfig["toastProviderNameVariant"];
+  toastPercentVariant?: StatusProviderConfig["toastPercentVariant"];
+  toastColorVariant?: StatusProviderConfig["toastColorVariant"];
+  toastAlignmentVariant?: StatusProviderConfig["toastAlignmentVariant"];
 }
 
 export async function runCliConfigCommand(options: RunCliConfigCommandOptions = {}): Promise<number> {
@@ -342,8 +347,12 @@ export async function runCliConfigCommand(options: RunCliConfigCommandOptions = 
       changes.toastDurationMs = toastDurationMs;
     }
 
+    // ─── Sidebar & CLI display ──────────────────────────────────────────────
+    console.log("\nSidebar & CLI display");
+    console.log("─────────────────────");
+
     const textVariant = await prompts.select<StatusProviderConfig["textVariant"]>({
-      message: "Text style for status rows?",
+      message: "Text style for status rows (sidebar & CLI)?",
       options: [
         { label: "Default", value: "default", hint: "name + bar + percent" },
         { label: "Minimal", value: "minimal", hint: "single line per provider" },
@@ -363,7 +372,7 @@ export async function runCliConfigCommand(options: RunCliConfigCommandOptions = 
     }
 
     const providerNameVariant = await prompts.select<StatusProviderConfig["providerNameVariant"]>({
-      message: "Provider name style?",
+      message: "Provider name style (sidebar & CLI)?",
       options: [
         { label: "Full", value: "full", hint: "e.g. OpenAI" },
         { label: "Short", value: "short", hint: "e.g. OpenAI" },
@@ -382,7 +391,7 @@ export async function runCliConfigCommand(options: RunCliConfigCommandOptions = 
     }
 
     const percentVariant = await prompts.select<StatusProviderConfig["percentVariant"]>({
-      message: "Percent display style?",
+      message: "Percent display style (sidebar & CLI)?",
       options: [
         { label: "Number", value: "number", hint: "percentage text only" },
         { label: "Bar", value: "bar", hint: "progress bar only" },
@@ -401,7 +410,7 @@ export async function runCliConfigCommand(options: RunCliConfigCommandOptions = 
     }
 
     const colorVariant = await prompts.select<StatusProviderConfig["colorVariant"]>({
-      message: "Color mode?",
+      message: "Color mode (sidebar & CLI)?",
       options: [
         { label: "Auto", value: "auto", hint: "color by remaining status" },
         { label: "None", value: "none", hint: "no colors" },
@@ -419,7 +428,7 @@ export async function runCliConfigCommand(options: RunCliConfigCommandOptions = 
     }
 
     const alignmentVariant = await prompts.select<StatusProviderConfig["alignmentVariant"]>({
-      message: "Row alignment?",
+      message: "Row alignment (sidebar & CLI)?",
       options: [
         { label: "Left", value: "left" },
         { label: "Right", value: "right" },
@@ -436,18 +445,144 @@ export async function runCliConfigCommand(options: RunCliConfigCommandOptions = 
       changes.alignmentVariant = alignmentVariant as StatusProviderConfig["alignmentVariant"];
     }
 
-    // Mostrar vista previa del sidebar con los cambios aplicados
-    const sidebarPreview = renderExampleSidebar({ config, changes });
-    const sidebarWidth = TUI_SIDEBAR_MAX_WIDTH;
-    const divider = "─".repeat(sidebarWidth);
-    console.log(`\n┌${divider}┐`);
-    console.log(`│${"Sidebar preview".padEnd(sidebarWidth - 2)}  │`);
-    console.log(`├${divider}┤`);
-    for (const line of sidebarPreview.split("\n")) {
-      const stripped = line.startsWith("  ") ? line.slice(2) : line;
-      console.log(`│ ${stripped.padEnd(sidebarWidth - 2)} │`);
+    // Vista previa del sidebar apenas se termina de configurar (énfasis en el flujo)
+    printPreviewBox("Sidebar preview", renderExampleSidebar({ config, changes }), TUI_SIDEBAR_MAX_WIDTH);
+
+    // ─── Toast popup display ────────────────────────────────────────────────
+    console.log("\nToast popup display");
+    console.log("───────────────────");
+
+    const sidebarTextVariant = "textVariant" in changes ? changes.textVariant! : config.textVariant;
+    const sidebarProviderNameVariant =
+      "providerNameVariant" in changes ? changes.providerNameVariant! : config.providerNameVariant;
+    const sidebarPercentVariant =
+      "percentVariant" in changes ? changes.percentVariant! : config.percentVariant;
+    const sidebarColorVariant = "colorVariant" in changes ? changes.colorVariant! : config.colorVariant;
+    const sidebarAlignmentVariant =
+      "alignmentVariant" in changes ? changes.alignmentVariant! : config.alignmentVariant;
+
+    const copyFromSidebar = await prompts.confirm({
+      message: "Copy sidebar settings as a starting point for the toast?",
+      initialValue: true,
+    });
+
+    if (prompts.isCancel(copyFromSidebar)) {
+      prompts.cancel("Cancelled.");
+      return 0;
     }
-    console.log(`└${divider}┘`);
+
+    const copyFromSidebarValue = copyFromSidebar as boolean;
+    const toastTextInitial = copyFromSidebarValue ? sidebarTextVariant : config.toastTextVariant;
+    const toastProviderNameInitial = copyFromSidebarValue
+      ? sidebarProviderNameVariant
+      : config.toastProviderNameVariant;
+    const toastPercentInitial = copyFromSidebarValue ? sidebarPercentVariant : config.toastPercentVariant;
+    const toastColorInitial = copyFromSidebarValue ? sidebarColorVariant : config.toastColorVariant;
+    const toastAlignmentInitial = copyFromSidebarValue
+      ? sidebarAlignmentVariant
+      : config.toastAlignmentVariant;
+
+    const toastTextVariant = await prompts.select<StatusProviderConfig["toastTextVariant"]>({
+      message: "Text style for status rows (toast)?",
+      options: [
+        { label: "Default", value: "default", hint: "name + bar + percent" },
+        { label: "Minimal", value: "minimal", hint: "single line per provider" },
+        { label: "Emoji", value: "emoji", hint: "status emoji prefix" },
+        { label: "Box", value: "box", hint: "box drawing framing" },
+      ],
+      initialValue: toastTextInitial,
+    });
+
+    if (prompts.isCancel(toastTextVariant)) {
+      prompts.cancel("Cancelled.");
+      return 0;
+    }
+
+    if (toastTextVariant !== config.toastTextVariant) {
+      changes.toastTextVariant = toastTextVariant as StatusProviderConfig["toastTextVariant"];
+    }
+
+    const toastProviderNameVariant = await prompts.select<StatusProviderConfig["toastProviderNameVariant"]>({
+      message: "Provider name style (toast)?",
+      options: [
+        { label: "Full", value: "full", hint: "e.g. OpenAI" },
+        { label: "Short", value: "short", hint: "e.g. OpenAI" },
+        { label: "Icon", value: "icon", hint: "symbol + short name" },
+      ],
+      initialValue: toastProviderNameInitial,
+    });
+
+    if (prompts.isCancel(toastProviderNameVariant)) {
+      prompts.cancel("Cancelled.");
+      return 0;
+    }
+
+    if (toastProviderNameVariant !== config.toastProviderNameVariant) {
+      changes.toastProviderNameVariant =
+        toastProviderNameVariant as StatusProviderConfig["toastProviderNameVariant"];
+    }
+
+    const toastPercentVariant = await prompts.select<StatusProviderConfig["toastPercentVariant"]>({
+      message: "Percent display style (toast)?",
+      options: [
+        { label: "Number", value: "number", hint: "percentage text only" },
+        { label: "Bar", value: "bar", hint: "progress bar only" },
+        { label: "Both", value: "both", hint: "bar + percentage" },
+      ],
+      initialValue: toastPercentInitial,
+    });
+
+    if (prompts.isCancel(toastPercentVariant)) {
+      prompts.cancel("Cancelled.");
+      return 0;
+    }
+
+    if (toastPercentVariant !== config.toastPercentVariant) {
+      changes.toastPercentVariant = toastPercentVariant as StatusProviderConfig["toastPercentVariant"];
+    }
+
+    const toastColorVariant = await prompts.select<StatusProviderConfig["toastColorVariant"]>({
+      message: "Color mode (toast)?",
+      options: [
+        { label: "Auto", value: "auto", hint: "color by remaining status" },
+        { label: "None", value: "none", hint: "no colors" },
+      ],
+      initialValue: toastColorInitial,
+    });
+
+    if (prompts.isCancel(toastColorVariant)) {
+      prompts.cancel("Cancelled.");
+      return 0;
+    }
+
+    if (toastColorVariant !== config.toastColorVariant) {
+      changes.toastColorVariant = toastColorVariant as StatusProviderConfig["toastColorVariant"];
+    }
+
+    const toastAlignmentVariant = await prompts.select<StatusProviderConfig["toastAlignmentVariant"]>({
+      message: "Row alignment (toast)?",
+      options: [
+        { label: "Left", value: "left" },
+        { label: "Right", value: "right" },
+      ],
+      initialValue: toastAlignmentInitial,
+    });
+
+    if (prompts.isCancel(toastAlignmentVariant)) {
+      prompts.cancel("Cancelled.");
+      return 0;
+    }
+
+    if (toastAlignmentVariant !== config.toastAlignmentVariant) {
+      changes.toastAlignmentVariant = toastAlignmentVariant as StatusProviderConfig["toastAlignmentVariant"];
+    }
+
+    // Vista previa del toast apenas se termina de configurar (énfasis en el flujo)
+    printPreviewBox(
+      "Toast preview",
+      renderExampleToast({ config, changes }),
+      Math.max(TUI_SIDEBAR_MAX_WIDTH, config.layout.maxWidth),
+    );
 
     const preview = buildPreview({
       config,
@@ -584,7 +719,44 @@ async function applyChanges(params: {
     setOrDelete("alignmentVariant", params.changes.alignmentVariant, c.alignmentVariant);
   }
 
+  if ("toastTextVariant" in params.changes) {
+    setOrDelete("toastTextVariant", params.changes.toastTextVariant, c.toastTextVariant);
+  }
+
+  if ("toastProviderNameVariant" in params.changes) {
+    setOrDelete(
+      "toastProviderNameVariant",
+      params.changes.toastProviderNameVariant,
+      c.toastProviderNameVariant,
+    );
+  }
+
+  if ("toastPercentVariant" in params.changes) {
+    setOrDelete("toastPercentVariant", params.changes.toastPercentVariant, c.toastPercentVariant);
+  }
+
+  if ("toastColorVariant" in params.changes) {
+    setOrDelete("toastColorVariant", params.changes.toastColorVariant, c.toastColorVariant);
+  }
+
+  if ("toastAlignmentVariant" in params.changes) {
+    setOrDelete("toastAlignmentVariant", params.changes.toastAlignmentVariant, c.toastAlignmentVariant);
+  }
+
   await writeJsonAtomic(params.configPath, nextData, { trailingNewline: true });
+}
+
+/** Prints a boxed preview block with a title and pre-rendered body lines. */
+function printPreviewBox(title: string, body: string, width: number): void {
+  const divider = "─".repeat(width);
+  console.log(`\n┌${divider}┐`);
+  console.log(`│${title.padEnd(width - 2)}  │`);
+  console.log(`├${divider}┤`);
+  for (const line of body.split("\n")) {
+    const stripped = line.startsWith("  ") ? line.slice(2) : line;
+    console.log(`│ ${stripped.padEnd(width - 2)} │`);
+  }
+  console.log(`└${divider}┘`);
 }
 
 function renderExampleSidebar(params: {
@@ -617,6 +789,44 @@ function renderExampleSidebar(params: {
     percentVariant: next.percentVariant,
     colorVariant: next.colorVariant,
     alignmentVariant: next.alignmentVariant,
+  });
+
+  return rendered
+    .split("\n")
+    .map((line) => `  ${line}`)
+    .join("\n");
+}
+
+function renderExampleToast(params: {
+  config: StatusProviderConfig;
+  changes: PendingChanges;
+}): string {
+  const c = params.config;
+  const next: StatusProviderConfig = {
+    ...c,
+    ...(params.changes as unknown as Partial<StatusProviderConfig>),
+  };
+
+  const now = new Date();
+  const resetA = new Date(now.getTime() + 5 * 60 * 60 * 1000).toISOString();
+  const resetB = new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString();
+
+  const entries: StatusProviderEntry[] = [
+    { name: "Copilot", percentRemaining: 72, resetTimeIso: resetA },
+    { name: "OpenAI", percentRemaining: 34, resetTimeIso: resetB },
+  ];
+
+  const rendered = formatStatusRows({
+    version: "preview",
+    layout: next.layout,
+    entries,
+    style: resolveStatusFormatStyle(next.formatStyle),
+    percentDisplayMode: next.percentDisplayMode,
+    textVariant: next.toastTextVariant,
+    providerNameVariant: next.toastProviderNameVariant,
+    percentVariant: next.toastPercentVariant,
+    colorVariant: next.toastColorVariant,
+    alignmentVariant: next.toastAlignmentVariant,
   });
 
   return rendered
@@ -670,6 +880,11 @@ function buildPreview(params: {
     ["percentVariant", c.percentVariant],
     ["colorVariant", c.colorVariant],
     ["alignmentVariant", c.alignmentVariant],
+    ["toastTextVariant", c.toastTextVariant],
+    ["toastProviderNameVariant", c.toastProviderNameVariant],
+    ["toastPercentVariant", c.toastPercentVariant],
+    ["toastColorVariant", c.toastColorVariant],
+    ["toastAlignmentVariant", c.toastAlignmentVariant],
   ]);
 
   section("new", [
@@ -688,10 +903,19 @@ function buildPreview(params: {
     ["percentVariant", "percentVariant" in params.changes ? params.changes.percentVariant! : c.percentVariant],
     ["colorVariant", "colorVariant" in params.changes ? params.changes.colorVariant! : c.colorVariant],
     ["alignmentVariant", "alignmentVariant" in params.changes ? params.changes.alignmentVariant! : c.alignmentVariant],
+    ["toastTextVariant", "toastTextVariant" in params.changes ? params.changes.toastTextVariant! : c.toastTextVariant],
+    ["toastProviderNameVariant", "toastProviderNameVariant" in params.changes ? params.changes.toastProviderNameVariant! : c.toastProviderNameVariant],
+    ["toastPercentVariant", "toastPercentVariant" in params.changes ? params.changes.toastPercentVariant! : c.toastPercentVariant],
+    ["toastColorVariant", "toastColorVariant" in params.changes ? params.changes.toastColorVariant! : c.toastColorVariant],
+    ["toastAlignmentVariant", "toastAlignmentVariant" in params.changes ? params.changes.toastAlignmentVariant! : c.toastAlignmentVariant],
   ]);
 
   lines.push("example sidebar:");
   lines.push(renderExampleSidebar({ config: c, changes: params.changes }));
+  lines.push("");
+
+  lines.push("example toast:");
+  lines.push(renderExampleToast({ config: c, changes: params.changes }));
   lines.push("");
 
   return lines.join("\n");

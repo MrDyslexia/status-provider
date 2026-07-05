@@ -102,13 +102,24 @@ export interface StatusProviderConfig {
   providerOrder: string[];
 
   /**
-   * Visual text style variants for status displays.
+   * Visual text style variants for the TUI sidebar panel and the
+   * `/status-provider` CLI/slash command output.
    */
   textVariant: StatusTextVariant;
   providerNameVariant: StatusProviderNameVariant;
   percentVariant: StatusPercentVariant;
   colorVariant: StatusColorVariant;
   alignmentVariant: StatusAlignmentVariant;
+
+  /**
+   * Visual text style variants for popup toasts, configured independently
+   * from the sidebar/CLI variants above.
+   */
+  toastTextVariant: StatusTextVariant;
+  toastProviderNameVariant: StatusProviderNameVariant;
+  toastPercentVariant: StatusPercentVariant;
+  toastColorVariant: StatusColorVariant;
+  toastAlignmentVariant: StatusAlignmentVariant;
 
   /** Path or command name for the local Claude CLI used by Anthropic probing. */
   anthropicBinaryPath: string;
@@ -181,6 +192,12 @@ export const DEFAULT_CONFIG: StatusProviderConfig = {
   percentVariant: "both" as const,
   colorVariant: "none" as const,
   alignmentVariant: "left" as const,
+
+  toastTextVariant: "default" as const,
+  toastProviderNameVariant: "full" as const,
+  toastPercentVariant: "both" as const,
+  toastColorVariant: "none" as const,
+  toastAlignmentVariant: "left" as const,
 
   anthropicBinaryPath: "claude",
 

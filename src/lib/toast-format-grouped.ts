@@ -14,9 +14,11 @@ import {
   DISPLAYED_PERCENT_LABEL_WIDTH,
   formatDisplayedPercentLabel,
   formatResetCountdown,
+  joinBarAndTrailingLabel,
   padLeft,
   padRight,
   resolveDisplayedPercent,
+  visibleLength,
 } from "./format-utils.js";
 import { formatGroupedHeader } from "./grouped-header-format.js";
 import { normalizeGroupedStatusEntries } from "./grouped-entry-normalization.js";
@@ -87,37 +89,10 @@ function resolveGroupedRowLabel(entry: StatusProviderEntry): string {
   return "Status window";
 }
 
-function buildGroupedBarLine(params: {
-  displayedPercent: number;
-  percentLabel: string;
-  right: string;
-  maxWidth: number;
-  separator: string;
-  percentCol: number;
-  preferredBarWidth: number;
-}): string {
-  const summaryMaxWidth = Math.max(
-    0,
-    params.maxWidth - params.separator.length - params.percentCol - params.separator.length - 10,
-  );
-  const summary = params.right ? params.right.slice(0, summaryMaxWidth) : "";
-  const summaryWidth = summary.length;
-  const barWidth = Math.max(
-    10,
-    params.maxWidth -
-      params.separator.length -
-      params.percentCol -
-      (summary ? params.separator.length + summaryWidth : 0),
-  );
-  const barCell = bar(params.displayedPercent, Math.min(params.preferredBarWidth, barWidth));
-  const percentCell = padLeft(params.percentLabel, params.percentCol);
-  const cells = summary ? [barCell, percentCell, summary] : [barCell, percentCell];
-  return cells.join(params.separator).slice(0, params.maxWidth);
-}
-
 export function formatStatusRowsGrouped(params: {
   layout?: {
     maxWidth: number;
+    barMaxWidth?: number;
     narrowAt: number;
     tinyAt: number;
   };
@@ -141,7 +116,9 @@ export function formatStatusRowsGrouped(params: {
 
   const layout = params.layout ?? { maxWidth: 50, narrowAt: 42, tinyAt: 32 };
   const totalMaxWidth = layout.maxWidth;
+  const barLineMaxWidth = Math.min(layout.barMaxWidth ?? totalMaxWidth, totalMaxWidth);
   const maxWidth = textVariant === "box" ? Math.max(10, totalMaxWidth - 4) : totalMaxWidth;
+  const barLineWidth = textVariant === "box" ? Math.max(10, barLineMaxWidth - 4) : barLineMaxWidth;
   const isTiny = maxWidth <= layout.tinyAt;
   const isNarrow = !isTiny && maxWidth <= layout.narrowAt;
 
@@ -203,7 +180,7 @@ export function formatStatusRowsGrouped(params: {
 
       if (isValueEntry(entry)) {
         const label = entry.label?.trim() || entry.name;
-        const timeStr = formatResetCountdown(entry.resetTimeIso, { compactRounded: true });
+        const timeStr = formatResetCountdown(entry.resetTimeIso);
         const value = entry.value.trim();
 
         if (textVariant === "minimal") {
@@ -253,7 +230,7 @@ export function formatStatusRowsGrouped(params: {
       // (i.e., any usage at all, or depleted)
       const timeStr =
         entry.percentRemaining < 100 && textVariant !== "minimal"
-          ? formatResetCountdown(entry.resetTimeIso, { compactRounded: true })
+          ? formatResetCountdown(entry.resetTimeIso)
           : "";
       const displayedPercent = resolveDisplayedPercent(
         entry.percentRemaining,
@@ -294,23 +271,12 @@ export function formatStatusRowsGrouped(params: {
         (padRight(leftLabel, leftMax) + separator + padLeft(timeStr, timeWidth)).slice(0, maxWidth),
       );
 
-      // Line 2: bar + percent + right summary (when available)
+      // Line 2: bar + percent label.
       if (percentVariant === "number") {
         lines.push(percentLabel);
-      } else if (percentVariant === "bar") {
-        lines.push(bar(displayedPercent, barWidth));
       } else {
-        lines.push(
-          buildGroupedBarLine({
-            displayedPercent,
-            percentLabel,
-            right,
-            maxWidth,
-            separator,
-            percentCol,
-            preferredBarWidth: barWidth,
-          }),
-        );
+        const trailingBarWidth = Math.max(10, barLineWidth - separator.length - visibleLength(percentLabel));
+        lines.push(joinBarAndTrailingLabel(bar(displayedPercent, trailingBarWidth), percentLabel, barLineWidth, separator));
       }
     }
   }

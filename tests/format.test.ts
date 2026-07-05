@@ -66,7 +66,21 @@ describe("formatStatusRows", () => {
     expect(barLine).not.toContain("81% left");
     expect(out).not.toContain("Status (remaining)");
     expect(out).not.toContain("Status (used)");
-    expect((barLine.match(/█/g) ?? [])).toHaveLength(2);
+    expect((barLine.match(/█/g) ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("keeps percent text visible when classic percentVariant is bar", () => {
+    const out = formatStatusRows({
+      version: "1.0.0",
+      layout: { maxWidth: 50, narrowAt: 42, tinyAt: 32 },
+      percentDisplayMode: "used",
+      percentVariant: "bar",
+      colorVariant: "auto",
+      entries: [{ name: "Synthetic", percentRemaining: 26 }],
+    });
+
+    expect(out).toContain("█");
+    expect(out).toContain("74% used");
   });
 
   it("renders over-status percentages above 100 in used mode", () => {
@@ -109,7 +123,7 @@ describe("formatStatusRows", () => {
     expect((barLine.match(/█/g) ?? [])).toHaveLength(0);
   });
 
-  it("renders percent-row usage summaries in classic output when providers supply them", () => {
+  it("omits x/y usage summaries from classic percent rows", () => {
     const out = formatStatusRows({
       version: "1.0.0",
       layout: { maxWidth: 50, narrowAt: 42, tinyAt: 32 },
@@ -129,9 +143,9 @@ describe("formatStatusRows", () => {
     });
 
     expect(out).toContain("Synthetic");
-    expect(out).toContain("0/135");
+    expect(out).not.toContain("0/135");
     expect(out).toContain("Qwen RPM");
-    expect(out).toContain("5/60");
+    expect(out).not.toContain("5/60");
     expect(out).toContain("92% left");
   });
 
@@ -168,7 +182,7 @@ describe("formatStatusRows", () => {
     expect(out).not.toMatch(/\d+[dhms]/);
   });
 
-  it("uses compact rounded reset labels for single-window rows", () => {
+  it("uses detailed reset labels for single-window rows", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-15T10:00:00.000Z"));
 
@@ -184,11 +198,11 @@ describe("formatStatusRows", () => {
       ],
     });
 
-    expect(out).toContain("2.5h");
-    expect(out).not.toContain("2h 14m");
+    expect(out).toContain("2h 14m");
+    expect(out).not.toContain("2.5h");
   });
 
-  it("uses compact rounded reset labels for grouped rows", () => {
+  it("uses detailed reset labels for grouped rows", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-15T10:00:00.000Z"));
 
@@ -207,8 +221,8 @@ describe("formatStatusRows", () => {
       ],
     });
 
-    expect(out).toContain("0.5h");
-    expect(out).not.toContain("0h 14m");
+    expect(out).toContain("14m");
+    expect(out).not.toContain("0.5h");
   });
 
   it("normalizes grouped headers in all-window toast output", () => {
@@ -461,7 +475,7 @@ describe("formatStatusRows", () => {
     expect(barLine).not.toContain("81% left");
     expect(out).not.toContain("Status (remaining)");
     expect(out).not.toContain("Status (used)");
-    expect((barLine?.match(/█/g) ?? [])).toHaveLength(2);
+    expect((barLine?.match(/█/g) ?? []).length).toBeGreaterThan(0);
   });
 
   it("renders all-window percent-row usage summaries when providers supply them", () => {
@@ -482,7 +496,7 @@ describe("formatStatusRows", () => {
 
     expect(out).toContain("Session");
     expect(out).not.toContain("5h window");
-    expect(out).toContain("0/135");
+    expect(out).not.toContain("0/135");
     expect(out).toContain("100% left");
   });
 
@@ -718,6 +732,23 @@ describe("formatStatusRows", () => {
     expect(out).toContain("🟢 Usage");
     expect(out).toContain("72% left");
     expect(out).not.toContain("█");
+  });
+
+  it("keeps percent text visible when grouped percentVariant is bar", () => {
+    const out = formatStatusRows({
+      version: "1.0.0",
+      layout: { maxWidth: 40, narrowAt: 32, tinyAt: 20 },
+      style: "allWindows",
+      percentDisplayMode: "used",
+      percentVariant: "bar",
+      colorVariant: "auto",
+      entries: [
+        { name: "Usage:", group: "Copilot", label: "Usage:", percentRemaining: 26 },
+      ],
+    });
+
+    expect(out).toContain("█");
+    expect(out).toContain("74% used");
   });
 
   it("applies box text variant to grouped output", () => {

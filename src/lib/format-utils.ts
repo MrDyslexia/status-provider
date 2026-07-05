@@ -139,7 +139,14 @@ const ANSI_ESCAPE_RE = /\x1B\[[0-9;]*[A-Za-z]/g;
  * Return the visible (display) length of a string, ignoring ANSI escape codes.
  */
 export function visibleLength(str: string): number {
-  return str.replace(ANSI_ESCAPE_RE, "").length;
+  return stripAnsi(str).length;
+}
+
+/**
+ * Remove ANSI escape codes from a string.
+ */
+export function stripAnsi(str: string): string {
+  return str.replace(ANSI_ESCAPE_RE, "");
 }
 
 /**
@@ -150,6 +157,32 @@ export function padRightVisible(str: string, width: number): string {
   const vlen = visibleLength(str);
   if (vlen >= width) return str;
   return str + " ".repeat(width - vlen);
+}
+
+/**
+ * Pad a string to `width` visible characters by prepending spaces.
+ * Handles strings that may contain ANSI color codes.
+ */
+export function padLeftVisible(str: string, width: number): string {
+  const vlen = visibleLength(str);
+  if (vlen >= width) return str;
+  return " ".repeat(width - vlen) + str;
+}
+
+/**
+ * Compose a bar row whose trailing label is anchored to the right edge.
+ */
+export function joinBarAndTrailingLabel(
+  barText: string,
+  labelText: string,
+  totalWidth: number,
+  separator = "  ",
+): string {
+  const labelWidth = visibleLength(labelText);
+  const targetBarWidth = Math.max(1, totalWidth - separator.length - labelWidth);
+  const normalizedBar =
+    visibleLength(barText) >= targetBarWidth ? barText.slice(0, targetBarWidth) : padRightVisible(barText, targetBarWidth);
+  return padRightVisible(`${normalizedBar}${separator}${labelText}`, totalWidth);
 }
 
 /**
@@ -188,7 +221,7 @@ export interface FormatResetCountdownOptions {
 /**
  * Format a reset countdown for toast display.
  *
- * Returns human-readable time like "2d 5h" or "3h 45m".
+ * Returns human-readable time like "2d 5h 22m" or "3h 45m".
  * When reset time is in the past or invalid, returns "reset".
  */
 export function formatResetCountdown(iso?: string, opts?: FormatResetCountdownOptions): string {
@@ -211,6 +244,7 @@ export function formatResetCountdown(iso?: string, opts?: FormatResetCountdownOp
     return `0.5h`;
   }
 
-  if (days > 0) return `${days}d ${hours}h`;
-  return `${hours}h ${minutes}m`;
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
 }

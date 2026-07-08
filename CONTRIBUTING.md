@@ -104,9 +104,9 @@ When adding a provider, keep the README setup wording tied to real behavior.
 
 - Pinned validation environment:
   - Bun: `1.3.4` (`package.json#packageManager`, CI setup)
-  - OpenCode CLI: `1.17.9` (`validation/Containerfile#OPENCODE_CLI_VERSION`)
-  - OpenCode plugin SDK: `@opencode-ai/plugin@1.17.9` (`package.json` dependency and peer)
-- `validation/Containerfile` pins the `opencode` CLI to a specific version (`OPENCODE_CLI_VERSION` build arg, default `1.17.9`) instead of trusting whatever the base image has baked in. `opencode` auto-updates itself on launch by default, which can silently drift the sandbox forward to an incompatible version.
+  - OpenCode CLI: `1.17.15` (`validation/Containerfile#OPENCODE_CLI_VERSION`)
+  - OpenCode plugin SDK: `@opencode-ai/plugin@1.17.15` (`package.json` dependency and peer)
+- `validation/Containerfile` pins the `opencode` CLI to a specific version (`OPENCODE_CLI_VERSION` build arg, default `1.17.15`) instead of trusting whatever the base image has baked in. `opencode` auto-updates itself on launch by default, which can silently drift the sandbox forward to an incompatible version. The global `bun add -g @opencode-ai/plugin` install in the Containerfile is also pinned to match, so a fresh image build never picks up an unrelated newer SDK version by accident.
 - `validation/opencode.template.json` is the tracked source of truth for the sandbox's `opencode.json`; `validation/tui.template.json` is the tracked source of truth for `tui.json`. `run.sh` copies both into `sandbox-state/.config/opencode/` on every run (that path itself is gitignored, since it's runtime state).
 - Three things in the templates matter and must not regress:
   - `"autoupdate": false` — stops opencode from upgrading itself past the pinned CLI version.

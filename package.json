@@ -79,7 +79,7 @@
   "devDependencies": {
     "@babel/core": "7.29.7",
     "@babel/preset-typescript": "7.29.7",
-    "@opencode-ai/plugin": "1.17.9",
+    "@opencode-ai/plugin": "1.17.15",
     "@types/node": "22.20.0",
     "babel-preset-solid": "1.9.12",
     "prettier": "3.8.4",
@@ -95,7 +95,7 @@
     "xdg-basedir": "5.1.0"
   },
   "peerDependencies": {
-    "@opencode-ai/plugin": "1.17.9"
+    "@opencode-ai/plugin": "1.17.15"
   },
   "engines": {
     "node": ">=18.0.0"

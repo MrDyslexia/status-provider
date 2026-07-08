@@ -182,7 +182,7 @@ describe("status-state shared cache", () => {
     await writeFile(
       path,
       JSON.stringify({
-        version: 1,
+        version: 2,
         packageVersion,
         key,
         providerId: provider.id,

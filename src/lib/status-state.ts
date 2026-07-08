@@ -9,7 +9,7 @@ import { getOpencodeRuntimeDirs } from "./opencode-runtime-paths.js";
 import { isLiveLocalUsageProviderId } from "./provider-metadata.js";
 import { getPackageVersion } from "./version.js";
 
-const STATUS_PROVIDER_CACHE_VERSION = 1 as const;
+const STATUS_PROVIDER_CACHE_VERSION = 2 as const;
 const STATUS_PROVIDER_CACHE_PACKAGE_VERSION_FALLBACK = "unknown";
 const STATUS_PROVIDER_CACHE_DIRNAME = "status-provider-state";
 const STATUS_PROVIDER_CACHE_RETENTION_MS = 24 * 60 * 60 * 1000;

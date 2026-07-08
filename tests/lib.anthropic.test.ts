@@ -325,6 +325,41 @@ describe("Claude CLI diagnostics", () => {
     await expect(queryAnthropicStatus()).resolves.toBeNull();
   });
 
+  it("keeps using OpenCode auth.json when Claude CLI auth status says unauthenticated", async () => {
+    vi.mocked(readAuthFileCached).mockResolvedValue({
+      anthropic: {
+        type: "oauth",
+        access: "valid-access-token",
+        refresh: "valid-refresh-token",
+        expires: Date.now() + 60 * 60 * 1000,
+      },
+    });
+    mockExecSequence([
+      { stdout: "claude 1.2.3\n" },
+      {
+        code: 1,
+        stderr: "Not logged in. Run `claude auth login` to continue.",
+      },
+    ]);
+    fetchWithTimeoutMock.mockResolvedValue(
+      mockJsonResponse({
+        oauth_usage: {
+          fiveHour: { usedPercent: 25, resetAt: "2026-03-25T18:00:00.000Z" },
+          sevenDay: { usedPercent: 40, resetAt: "2026-04-01T00:00:00.000Z" },
+        },
+      }),
+    );
+
+    const diagnostics = await getAnthropicDiagnostics();
+
+    expect(diagnostics.installed).toBe(true);
+    expect(diagnostics.authStatus).toBe("authenticated");
+    expect(diagnostics.statusSupported).toBe(true);
+    expect(diagnostics.statusSource).toBe("claude-credentials-oauth-api");
+    expect(diagnostics.status?.five_hour.percentRemaining).toBe(75);
+    expect(diagnostics.status?.seven_day.percentRemaining).toBe(60);
+  });
+
   it("returns status data when Claude auth status JSON includes status windows", async () => {
     mockExecSequence([
       { stdout: "claude 1.2.3\n" },

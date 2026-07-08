@@ -1362,12 +1362,16 @@ export async function getAnthropicDiagnostics(
 
   const inFlight = (async () => {
     const localDiagnostics = await getCachedAnthropicLocalDiagnostics({ binaryPath });
-    if (localDiagnostics.authStatus !== "authenticated" || localDiagnostics.localStatus) {
+    if (localDiagnostics.localStatus) {
       return mapLocalDiagnosticsToAnthropicDiagnostics(localDiagnostics);
     }
 
     const credentials = await readClaudeCredentialsAccessToken();
     if (credentials.state !== "configured") {
+      if (localDiagnostics.authStatus !== "authenticated") {
+        return mapLocalDiagnosticsToAnthropicDiagnostics(localDiagnostics);
+      }
+
       const diagnostics: AnthropicDiagnostics = {
         installed: localDiagnostics.installed,
         version: localDiagnostics.version,
@@ -1426,7 +1430,7 @@ export async function getAnthropicDiagnostics(
     const diagnostics: AnthropicDiagnostics = {
       installed: localDiagnostics.installed,
       version: localDiagnostics.version,
-      authStatus: localDiagnostics.authStatus,
+      authStatus: "authenticated",
       statusSupported: true,
       statusSource: "claude-credentials-oauth-api",
       checkedCommands: localDiagnostics.checkedCommands,

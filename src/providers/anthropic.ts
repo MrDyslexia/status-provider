@@ -10,11 +10,7 @@ import type {
   StatusProviderResult,
   StatusProviderEntry,
 } from "../lib/entries.js";
-import {
-  hasAnthropicCredentialsConfigured,
-  queryAnthropicStatus,
-} from "../lib/anthropic.js";
-import { isCanonicalProviderAvailable } from "../lib/provider-availability.js";
+import { hasAnthropicCredentialsConfigured, queryAnthropicStatus } from "../lib/anthropic.js";
 import { attemptedErrorResult, attemptedResult, notAttemptedResult } from "./result-helpers.js";
 
 export function getAnthropicNoDataMessage(): string {
@@ -25,15 +21,6 @@ export const anthropicProvider: StatusProvider = {
   id: "anthropic",
 
   async isAvailable(ctx: StatusProviderContext): Promise<boolean> {
-    const providerAvailable = await isCanonicalProviderAvailable({
-      ctx,
-      providerId: "anthropic",
-      fallbackOnError: false,
-    });
-    if (!providerAvailable) {
-      return false;
-    }
-
     return await hasAnthropicCredentialsConfigured({
       binaryPath: ctx.config?.anthropicBinaryPath,
     });

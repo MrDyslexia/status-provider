@@ -1,0 +1,115 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`sidebar config variants > alignmentVariant > left aligns the name in minimal rows 1`] = `
+[
+  "OpenAI                      34% left",
+  "Kimi Code                   72% left",
+]
+`;
+
+exports[`sidebar config variants > alignmentVariant > right aligns the name in minimal rows 1`] = `
+[
+  "                    OpenAI  34% left",
+  "                 Kimi Code  72% left",
+]
+`;
+
+exports[`sidebar config variants > formatStyle > allWindows renders grouped windows under a provider header 1`] = `
+[
+  "[OpenAI] (Pro)",
+  "Session                        2h 0m",
+  "█████████░░░░░░░░░░░░░░░░░  34% left",
+  "Weekly                         2h 0m",
+  "███████████████████░░░░░░░  72% left",
+]
+`;
+
+exports[`sidebar config variants > formatStyle > singleWindow renders one row per provider 1`] = `
+[
+  "OpenAI                         2h 0m",
+  "█████████░░░░░░░░░░░░░░░░░  34% left",
+  "Kimi Code                      2h 0m",
+  "███████████████████░░░░░░░  72% left",
+]
+`;
+
+exports[`sidebar config variants > percentVariant > bar renders a bar with the number 1`] = `
+[
+  "OpenAI                         2h 0m",
+  "█████████░░░░░░░░░░░░░░░░░  34% left",
+  "Kimi Code                      2h 0m",
+  "███████████████████░░░░░░░  72% left",
+]
+`;
+
+exports[`sidebar config variants > percentVariant > both renders a bar with the number 1`] = `
+[
+  "OpenAI                         2h 0m",
+  "█████████░░░░░░░░░░░░░░░░░  34% left",
+  "Kimi Code                      2h 0m",
+  "███████████████████░░░░░░░  72% left",
+]
+`;
+
+exports[`sidebar config variants > percentVariant > number omits the bar 1`] = `
+[
+  "OpenAI                         2h 0m",
+  "34% left",
+  "Kimi Code                      2h 0m",
+  "72% left",
+]
+`;
+
+exports[`sidebar config variants > providerNameVariant > icon prefixes names with provider icons 1`] = `
+[
+  "◎ OpenAI                       2h 0m",
+  "█████████░░░░░░░░░░░░░░░░░  34% left",
+  "◐ Kimi                         2h 0m",
+  "███████████████████░░░░░░░  72% left",
+]
+`;
+
+exports[`sidebar config variants > providerNameVariant > short uses short labels where available 1`] = `
+[
+  "OpenAI                         2h 0m",
+  "█████████░░░░░░░░░░░░░░░░░  34% left",
+  "Kimi                           2h 0m",
+  "███████████████████░░░░░░░  72% left",
+]
+`;
+
+exports[`sidebar config variants > textVariant > box wraps rows in a border 1`] = `
+[
+  "┌──────────────────────────────────┐",
+  "│ OpenAI                     2h 0m │",
+  "│ ███████░░░░░░░░░░░░░░░  34% left │",
+  "│ Kimi Code                  2h 0m │",
+  "│ ████████████████░░░░░░  72% left │",
+  "└──────────────────────────────────┘",
+]
+`;
+
+exports[`sidebar config variants > textVariant > default renders two-line rows 1`] = `
+[
+  "OpenAI                         2h 0m",
+  "█████████░░░░░░░░░░░░░░░░░  34% left",
+  "Kimi Code                      2h 0m",
+  "███████████████████░░░░░░░  72% left",
+]
+`;
+
+exports[`sidebar config variants > textVariant > emoji prefixes rows with status emoji 1`] = `
+[
+  "🟡 OpenAI                      2h 0m",
+  "█████████░░░░░░░░░░░░░░░░░  34% left",
+  "🟢 Kimi Code                   2h 0m",
+  "███████████████████░░░░░░░  72% left",
+]
+`;
+
+exports[`sidebar config variants > textVariant > minimal renders single-line rows 1`] = `
+[
+  "OpenAI                      34% left",
+  "Kimi Code                   72% left",
+]
+`;

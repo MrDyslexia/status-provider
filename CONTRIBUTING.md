@@ -116,9 +116,10 @@ When adding a provider, keep the README setup wording tied to real behavior.
 
 ### Config field QA (`validation/qa-matrix.md`)
 
-- Every field in `StatusProviderConfig` (`src/lib/types.ts`) is enumerated in `validation/qa-matrix.md`, grouped into batches (A-F). Wizard-driven fields are dispatched to the `status-provider-tui-test-simple`/`status-provider-tui-test-complex` OpenCode agents; fields with no wizard prompt are validated directly against the sandbox by the `status-provider-tui-test-orchestrator` agent.
-- Run one batch at a time: `Task(subagent_type: "status-provider-tui-test-orchestrator", prompt: "Run Batch <LETTER> from validation/qa-matrix.md against sandbox port 3002.")`. The orchestrator updates the matrix's `Status` column and stops — it never chains into the next batch automatically, so progress can be checkpointed between sessions.
-- Toast-only fields (Batch F) are deferred; see the matrix file for the current cutoff and reasoning.
+- Every visual field in `StatusProviderConfig` (`src/lib/types.ts`) that affects the TUI sidebar is enumerated in `validation/qa-matrix.md` and validated deterministically in `tests/sidebar-config-variants.test.ts` using synthetic data and snapshots.
+- Run the test locally: `bun run test tests/sidebar-config-variants.test.ts`. It completes in ~100 ms and covers every sidebar visual variant (format style, percent mode, text variant, provider name variant, percent variant, color variant, alignment variant).
+- Add a snapshot test when introducing a new visual variant or changing a formatting contract. Keep manual TUI smoke tests minimal and reserved for wiring/integration concerns that cannot be exercised with synthetic data.
+- Toast-only fields are still listed in `validation/qa-matrix.md` for completeness but are validated separately from the sidebar matrix.
 
 ## Quality Bar for Fixes
 

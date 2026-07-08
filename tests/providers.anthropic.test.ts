@@ -99,7 +99,7 @@ describe("anthropic provider", () => {
     expect(anthropicProvider.matchesCurrentModel?.("copilot/claude-sonnet-4-5")).toBe(false);
   });
 
-  it("is available only when provider ids include anthropic and Claude CLI auth is ready", async () => {
+  it("is available when Claude CLI auth is ready, regardless of provider ids", async () => {
     const { hasAnthropicCredentialsConfigured } = await import("../src/lib/anthropic.js");
     (hasAnthropicCredentialsConfigured as any).mockResolvedValue(true);
 
@@ -108,10 +108,10 @@ describe("anthropic provider", () => {
     ).resolves.toBe(true);
     await expect(
       anthropicProvider.isAvailable(createProviderAvailabilityContext({ providerIds: ["claude"] })),
-    ).resolves.toBe(false);
+    ).resolves.toBe(true);
     await expect(
       anthropicProvider.isAvailable(createProviderAvailabilityContext({ providerIds: ["openai"] })),
-    ).resolves.toBe(false);
+    ).resolves.toBe(true);
     await expect(
       anthropicProvider.isAvailable(
         createProviderAvailabilityContext({ providerIds: ["copilot", "anthropic"] }),

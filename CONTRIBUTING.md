@@ -114,6 +114,12 @@ When adding a provider, keep the README setup wording tied to real behavior.
   - `tui.json` must include `"plugin": ["file:///project"]` so the TUI/sidebar plugin loads. Both paths must reference the **package directory**, not individual files like `file:///project/dist/tui.js`. opencode resolves the `server` and `tui` plugin entrypoints independently via `package.json`'s `exports["./server"]` / `exports["./tui"]`. Pointing at a raw file bypasses that resolution and opencode's `server`-kind loader tries to load the `tui`-only file too, which throws `must default export an object with server()`.
 - When bumping `OPENCODE_CLI_VERSION`, also bump `peerDependencies["@opencode-ai/plugin"]` in `package.json` to match, rebuild the sandbox image, and re-verify the TUI sidebar panel actually renders (not just that it loads without error) before merging.
 
+### Config field QA (`validation/qa-matrix.md`)
+
+- Every field in `StatusProviderConfig` (`src/lib/types.ts`) is enumerated in `validation/qa-matrix.md`, grouped into batches (A-F). Wizard-driven fields are dispatched to the `status-provider-tui-test-simple`/`status-provider-tui-test-complex` OpenCode agents; fields with no wizard prompt are validated directly against the sandbox by the `status-provider-tui-test-orchestrator` agent.
+- Run one batch at a time: `Task(subagent_type: "status-provider-tui-test-orchestrator", prompt: "Run Batch <LETTER> from validation/qa-matrix.md against sandbox port 3002.")`. The orchestrator updates the matrix's `Status` column and stops — it never chains into the next batch automatically, so progress can be checkpointed between sessions.
+- Toast-only fields (Batch F) are deferred; see the matrix file for the current cutoff and reasoning.
+
 ## Quality Bar for Fixes
 
 - Prefer the smallest safe fix that addresses the root cause.

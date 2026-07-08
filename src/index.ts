@@ -17,6 +17,12 @@ type V1PluginModule = {
 // This avoids the legacy getLegacyPlugins fallback path in OpenCode's plugin
 // loader, which iterates Object.values(mod) and can conflict with other
 // plugins that also use the legacy path.
+//
+// Do NOT also export `tui` here: opencode resolves `server` and `tui` as
+// independent plugin entrypoints via package.json's exports["./server"] /
+// exports["./tui"] (see src/tui.tsx for the tui-kind module). A single
+// default export carrying both throws "must default export either server()
+// or tui(), not both".
 const pluginModule = {
   id: "status-provider",
   server: StatusProviderPlugin,

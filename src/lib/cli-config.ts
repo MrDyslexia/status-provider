@@ -472,109 +472,121 @@ export async function runCliConfigCommand(options: RunCliConfigCommandOptions = 
     }
 
     const copyFromSidebarValue = copyFromSidebar as boolean;
-    const toastTextInitial = copyFromSidebarValue ? sidebarTextVariant : config.toastTextVariant;
-    const toastProviderNameInitial = copyFromSidebarValue
-      ? sidebarProviderNameVariant
-      : config.toastProviderNameVariant;
-    const toastPercentInitial = copyFromSidebarValue ? sidebarPercentVariant : config.toastPercentVariant;
-    const toastColorInitial = copyFromSidebarValue ? sidebarColorVariant : config.toastColorVariant;
-    const toastAlignmentInitial = copyFromSidebarValue
-      ? sidebarAlignmentVariant
-      : config.toastAlignmentVariant;
 
-    const toastTextVariant = await prompts.select<StatusProviderConfig["toastTextVariant"]>({
-      message: "Text style for status rows (toast)?",
-      options: [
-        { label: "Default", value: "default", hint: "name + bar + percent" },
-        { label: "Minimal", value: "minimal", hint: "single line per provider" },
-        { label: "Emoji", value: "emoji", hint: "status emoji prefix" },
-        { label: "Box", value: "box", hint: "box drawing framing" },
-      ],
-      initialValue: toastTextInitial,
-    });
+    if (copyFromSidebarValue) {
+      // User chose to copy sidebar settings as-is: apply them directly and
+      // skip the individual toast prompts entirely.
+      if (sidebarTextVariant !== config.toastTextVariant) {
+        changes.toastTextVariant = sidebarTextVariant as StatusProviderConfig["toastTextVariant"];
+      }
+      if (sidebarProviderNameVariant !== config.toastProviderNameVariant) {
+        changes.toastProviderNameVariant =
+          sidebarProviderNameVariant as StatusProviderConfig["toastProviderNameVariant"];
+      }
+      if (sidebarPercentVariant !== config.toastPercentVariant) {
+        changes.toastPercentVariant = sidebarPercentVariant as StatusProviderConfig["toastPercentVariant"];
+      }
+      if (sidebarColorVariant !== config.toastColorVariant) {
+        changes.toastColorVariant = sidebarColorVariant as StatusProviderConfig["toastColorVariant"];
+      }
+      if (sidebarAlignmentVariant !== config.toastAlignmentVariant) {
+        changes.toastAlignmentVariant = sidebarAlignmentVariant as StatusProviderConfig["toastAlignmentVariant"];
+      }
+    } else {
+      const toastTextVariant = await prompts.select<StatusProviderConfig["toastTextVariant"]>({
+        message: "Text style for status rows (toast)?",
+        options: [
+          { label: "Default", value: "default", hint: "name + bar + percent" },
+          { label: "Minimal", value: "minimal", hint: "single line per provider" },
+          { label: "Emoji", value: "emoji", hint: "status emoji prefix" },
+          { label: "Box", value: "box", hint: "box drawing framing" },
+        ],
+        initialValue: config.toastTextVariant,
+      });
 
-    if (prompts.isCancel(toastTextVariant)) {
-      prompts.cancel("Cancelled.");
-      return 0;
-    }
+      if (prompts.isCancel(toastTextVariant)) {
+        prompts.cancel("Cancelled.");
+        return 0;
+      }
 
-    if (toastTextVariant !== config.toastTextVariant) {
-      changes.toastTextVariant = toastTextVariant as StatusProviderConfig["toastTextVariant"];
-    }
+      if (toastTextVariant !== config.toastTextVariant) {
+        changes.toastTextVariant = toastTextVariant as StatusProviderConfig["toastTextVariant"];
+      }
 
-    const toastProviderNameVariant = await prompts.select<StatusProviderConfig["toastProviderNameVariant"]>({
-      message: "Provider name style (toast)?",
-      options: [
-        { label: "Full", value: "full", hint: "e.g. OpenAI" },
-        { label: "Short", value: "short", hint: "e.g. OpenAI" },
-        { label: "Icon", value: "icon", hint: "symbol + short name" },
-      ],
-      initialValue: toastProviderNameInitial,
-    });
+      const toastProviderNameVariant = await prompts.select<StatusProviderConfig["toastProviderNameVariant"]>({
+        message: "Provider name style (toast)?",
+        options: [
+          { label: "Full", value: "full", hint: "e.g. OpenAI" },
+          { label: "Short", value: "short", hint: "e.g. OpenAI" },
+          { label: "Icon", value: "icon", hint: "symbol + short name" },
+        ],
+        initialValue: config.toastProviderNameVariant,
+      });
 
-    if (prompts.isCancel(toastProviderNameVariant)) {
-      prompts.cancel("Cancelled.");
-      return 0;
-    }
+      if (prompts.isCancel(toastProviderNameVariant)) {
+        prompts.cancel("Cancelled.");
+        return 0;
+      }
 
-    if (toastProviderNameVariant !== config.toastProviderNameVariant) {
-      changes.toastProviderNameVariant =
-        toastProviderNameVariant as StatusProviderConfig["toastProviderNameVariant"];
-    }
+      if (toastProviderNameVariant !== config.toastProviderNameVariant) {
+        changes.toastProviderNameVariant =
+          toastProviderNameVariant as StatusProviderConfig["toastProviderNameVariant"];
+      }
 
-    const toastPercentVariant = await prompts.select<StatusProviderConfig["toastPercentVariant"]>({
-      message: "Percent display style (toast)?",
-      options: [
-        { label: "Number", value: "number", hint: "percentage text only" },
-        { label: "Bar", value: "bar", hint: "progress bar only" },
-        { label: "Both", value: "both", hint: "bar + percentage" },
-      ],
-      initialValue: toastPercentInitial,
-    });
+      const toastPercentVariant = await prompts.select<StatusProviderConfig["toastPercentVariant"]>({
+        message: "Percent display style (toast)?",
+        options: [
+          { label: "Number", value: "number", hint: "percentage text only" },
+          { label: "Bar", value: "bar", hint: "progress bar only" },
+          { label: "Both", value: "both", hint: "bar + percentage" },
+        ],
+        initialValue: config.toastPercentVariant,
+      });
 
-    if (prompts.isCancel(toastPercentVariant)) {
-      prompts.cancel("Cancelled.");
-      return 0;
-    }
+      if (prompts.isCancel(toastPercentVariant)) {
+        prompts.cancel("Cancelled.");
+        return 0;
+      }
 
-    if (toastPercentVariant !== config.toastPercentVariant) {
-      changes.toastPercentVariant = toastPercentVariant as StatusProviderConfig["toastPercentVariant"];
-    }
+      if (toastPercentVariant !== config.toastPercentVariant) {
+        changes.toastPercentVariant = toastPercentVariant as StatusProviderConfig["toastPercentVariant"];
+      }
 
-    const toastColorVariant = await prompts.select<StatusProviderConfig["toastColorVariant"]>({
-      message: "Color mode (toast)?",
-      options: [
-        { label: "Auto", value: "auto", hint: "color by remaining status" },
-        { label: "None", value: "none", hint: "no colors" },
-      ],
-      initialValue: toastColorInitial,
-    });
+      const toastColorVariant = await prompts.select<StatusProviderConfig["toastColorVariant"]>({
+        message: "Color mode (toast)?",
+        options: [
+          { label: "Auto", value: "auto", hint: "color by remaining status" },
+          { label: "None", value: "none", hint: "no colors" },
+        ],
+        initialValue: config.toastColorVariant,
+      });
 
-    if (prompts.isCancel(toastColorVariant)) {
-      prompts.cancel("Cancelled.");
-      return 0;
-    }
+      if (prompts.isCancel(toastColorVariant)) {
+        prompts.cancel("Cancelled.");
+        return 0;
+      }
 
-    if (toastColorVariant !== config.toastColorVariant) {
-      changes.toastColorVariant = toastColorVariant as StatusProviderConfig["toastColorVariant"];
-    }
+      if (toastColorVariant !== config.toastColorVariant) {
+        changes.toastColorVariant = toastColorVariant as StatusProviderConfig["toastColorVariant"];
+      }
 
-    const toastAlignmentVariant = await prompts.select<StatusProviderConfig["toastAlignmentVariant"]>({
-      message: "Row alignment (toast)?",
-      options: [
-        { label: "Left", value: "left" },
-        { label: "Right", value: "right" },
-      ],
-      initialValue: toastAlignmentInitial,
-    });
+      const toastAlignmentVariant = await prompts.select<StatusProviderConfig["toastAlignmentVariant"]>({
+        message: "Row alignment (toast)?",
+        options: [
+          { label: "Left", value: "left" },
+          { label: "Right", value: "right" },
+        ],
+        initialValue: config.toastAlignmentVariant,
+      });
 
-    if (prompts.isCancel(toastAlignmentVariant)) {
-      prompts.cancel("Cancelled.");
-      return 0;
-    }
+      if (prompts.isCancel(toastAlignmentVariant)) {
+        prompts.cancel("Cancelled.");
+        return 0;
+      }
 
-    if (toastAlignmentVariant !== config.toastAlignmentVariant) {
-      changes.toastAlignmentVariant = toastAlignmentVariant as StatusProviderConfig["toastAlignmentVariant"];
+      if (toastAlignmentVariant !== config.toastAlignmentVariant) {
+        changes.toastAlignmentVariant = toastAlignmentVariant as StatusProviderConfig["toastAlignmentVariant"];
+      }
     }
 
     // Vista previa del toast apenas se termina de configurar (énfasis en el flujo)

@@ -32,6 +32,9 @@
     "README.md",
     "LICENSE"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc && node scripts/copy-data.mjs && node scripts/prepare-tui-dist.mjs",
     "build:check": "bun run build && bun pm pack --dry-run",
@@ -74,22 +77,25 @@
   },
   "homepage": "https://github.com/MrDyslexia/status-provider#readme",
   "devDependencies": {
-    "@opencode-ai/plugin": "^1.17.9",
-    "@types/node": "^22.20.0",
-    "prettier": "^3.8.4",
-    "typescript": "^5.9.3",
-    "vitest": "^4.1.9"
+    "@babel/core": "7.29.7",
+    "@babel/preset-typescript": "7.29.7",
+    "@opencode-ai/plugin": "1.17.9",
+    "@types/node": "22.20.0",
+    "babel-preset-solid": "1.9.12",
+    "prettier": "3.8.4",
+    "typescript": "5.9.3",
+    "vitest": "4.1.9"
   },
   "dependencies": {
-    "@clack/prompts": "^1.6.0",
-    "@opentui/core": "^0.2.16",
-    "@opentui/solid": "^0.2.16",
-    "comment-json": "^5.0.0",
-    "solid-js": "^1.9.13",
-    "xdg-basedir": "^5.1.0"
+    "@clack/prompts": "1.6.0",
+    "@opentui/core": "0.2.16",
+    "@opentui/solid": "0.2.16",
+    "comment-json": "5.0.0",
+    "solid-js": "1.9.13",
+    "xdg-basedir": "5.1.0"
   },
   "peerDependencies": {
-    "@opencode-ai/plugin": "^1.4.3"
+    "@opencode-ai/plugin": "1.17.9"
   },
   "engines": {
     "node": ">=18.0.0"

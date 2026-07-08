@@ -7,7 +7,7 @@ IMAGE="status-provider-validation"
 CONTAINER="$IMAGE"
 SANDBOX_STATE="$SCRIPT_DIR/sandbox-state"
 HOST_AUTH_DIR="$HOME/.local/share/opencode"
-PORT="${PORT:-3004}"
+PORT="${PORT:-3002}"
 
 usage() {
   echo ""
@@ -17,7 +17,7 @@ usage() {
   echo ""
   echo "    --build       Rebuild validation image before running"
   echo "    --stop        Stop validation container"
-  echo "    PORT=XXXX     Expose a different host port (default: 3004)"
+  echo "    PORT=XXXX     Expose a different host port (default: 3002)"
   echo ""
   exit 0
 }
@@ -25,12 +25,20 @@ usage() {
 [[ "${1:-}" == "--help" ]] && usage
 
 if [[ "${1:-}" == "--stop" ]]; then
-  podman stop "$CONTAINER" 2>/dev/null && echo "Stopped $CONTAINER" || echo "$CONTAINER was not running"
+  podman rm -f "$CONTAINER" 2>/dev/null && echo "Removed $CONTAINER" || echo "$CONTAINER was not present"
   exit 0
 fi
 
 mkdir -p "$SANDBOX_STATE/.local/share/opencode"
 mkdir -p "$SANDBOX_STATE/.config/opencode"
+
+# Sync tracked OpenCode templates on every run. This is infra config (plugin
+# entrypoints + autoupdate), not user test data, so it's always kept in sync
+# rather than left as a one-time copy. The server plugin belongs in
+# opencode.json; the TUI/sidebar plugin belongs in tui.json. Both must reference
+# the package dir (file:///project), not raw dist/*.js paths.
+cp "$SCRIPT_DIR/opencode.template.json" "$SANDBOX_STATE/.config/opencode/opencode.json"
+cp "$SCRIPT_DIR/tui.template.json" "$SANDBOX_STATE/.config/opencode/tui.json"
 
 for f in auth.json auth-v2.json; do
   if [[ -f "$HOST_AUTH_DIR/$f" ]]; then
@@ -47,6 +55,10 @@ if podman ps --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER}$"; then
   echo "$CONTAINER already running. Use ./validation/run.sh --stop first."
   exit 1
 fi
+
+# Old validation containers created before --rm, or killed outside this script,
+# can stay in exited state and keep the name reserved.
+podman rm "$CONTAINER" 2>/dev/null || true
 
 if [[ ! -d "$REPO_ROOT/node_modules" ]]; then
   bun install --cwd "$REPO_ROOT"

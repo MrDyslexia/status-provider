@@ -8,8 +8,9 @@
  */
 
 import type { StatusProviderEntry, StatusProviderError, SessionTokensData } from "./entries.js";
+import type { PercentDisplayMode } from "./types.js";
 import { isValueEntry } from "./entries.js";
-import { bar, clampInt, padRight } from "./format-utils.js";
+import { bar, clampInt, formatDisplayedPercentLabel, padRight, resolveDisplayedPercent } from "./format-utils.js";
 import { formatGroupedHeader } from "./grouped-header-format.js";
 import { groupStatusEntries } from "./grouped-entry-normalization.js";
 import { renderPlainTextReport, type ReportDocument, type ReportSection } from "./report-document.js";
@@ -46,6 +47,7 @@ function buildStatusCommandDocument(params: {
   errors: StatusProviderError[];
   sessionTokens?: SessionTokensData;
   generatedAtMs?: number;
+  percentDisplayMode?: PercentDisplayMode;
 }): ReportDocument {
   const groups = groupStatusEntries(params.entries, "status");
   const normalizedEntries = groups.flatMap((group) => group.entries);
@@ -72,7 +74,9 @@ function buildStatusCommandDocument(params: {
       }
 
       const pct = clampInt(row.percentRemaining, 0, 100);
-      lines.push(`  ${labelCol} ${bar(pct, barWidth)}  ${pct}% left${suffix}`);
+      const displayedPercent = resolveDisplayedPercent(pct, params.percentDisplayMode);
+      const percentLabel = formatDisplayedPercentLabel(pct, params.percentDisplayMode);
+      lines.push(`  ${labelCol} ${bar(displayedPercent, barWidth)}  ${percentLabel}${suffix}`);
     }
     return {
       id: `group-${index}`,
@@ -116,6 +120,7 @@ export function formatStatusCommand(params: {
   errors: StatusProviderError[];
   sessionTokens?: SessionTokensData;
   generatedAtMs?: number;
+  percentDisplayMode?: PercentDisplayMode;
 }): string {
   return renderPlainTextReport(buildStatusCommandDocument(params));
 }

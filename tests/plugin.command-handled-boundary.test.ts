@@ -78,6 +78,26 @@ describe("plugin command handled boundary", () => {
     expect(client.session.prompt).toHaveBeenCalledTimes(1);
   });
 
+  it("swallows handled sentinels for modern OpenCode command hooks that provide mutable output parts", async () => {
+    const { StatusProviderPlugin } = await import("../src/plugin.js");
+    const client = createClient();
+    const hooks = await StatusProviderPlugin({ client } as any);
+    const output = { parts: [{ type: "text", text: "/status" }] };
+
+    await expect(
+      hooks["command.execute.before"]?.(
+        {
+          command: "status",
+          sessionID: "session-modern-command-output",
+        } as any,
+        output as any,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(output.parts).toEqual([]);
+    expect(client.session.prompt).toHaveBeenCalledTimes(1);
+  });
+
   it("downgrades availability probe errors into handled unavailable output", async () => {
     mocks.getProviders.mockReturnValue([
       {

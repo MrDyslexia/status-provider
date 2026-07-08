@@ -1,5 +1,14 @@
 FROM localhost/vforge-sandbox
 
+# Pin the opencode CLI to the version this plugin is validated against, regardless
+# of whatever the base image happens to have baked in. opencode's own auto-update
+# (default: on) can silently drift this forward on first launch; combined with
+# opencode.template.json's "autoupdate": false, this keeps the sandbox reproducible.
+# Bump deliberately alongside devDependencies["@opencode-ai/plugin"] in package.json,
+# and re-verify the TUI sidebar plugin still loads (see validation/README or CONTRIBUTING).
+ARG OPENCODE_CLI_VERSION=1.17.9
+RUN npm install -g opencode-ai@${OPENCODE_CLI_VERSION}
+
 RUN bun add -g @opencode-ai/plugin
 
 COPY ttyd /usr/local/bin/ttyd

@@ -180,6 +180,40 @@ describe("formatStatusCommand", () => {
     expect(out).toContain("resets in 3h");
   });
 
+  it("respects percentDisplayMode: used, flipping both the label and the bar fill", () => {
+    const out = formatStatusCommand({
+      entries: [
+        {
+          name: "OpenAI",
+          group: "OpenAI",
+          label: "5h:",
+          percentRemaining: 84,
+        },
+      ],
+      errors: [],
+      percentDisplayMode: "used",
+    });
+
+    expect(out).toContain("16% used");
+    expect(out).not.toContain("84% left");
+  });
+
+  it("defaults to percentDisplayMode: remaining when not provided (backward compatible)", () => {
+    const out = formatStatusCommand({
+      entries: [
+        {
+          name: "OpenAI",
+          group: "OpenAI",
+          label: "5h:",
+          percentRemaining: 84,
+        },
+      ],
+      errors: [],
+    });
+
+    expect(out).toContain("84% left");
+  });
+
   it("sizes the grouped /status-provider label column from the visible grouped text", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-15T12:00:00.000Z"));

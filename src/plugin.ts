@@ -52,7 +52,7 @@ import {
   formatYmd,
   type Ymd,
 } from "./lib/command-parsing.js";
-import { handled } from "./lib/command-handled.js";
+import { handled, isCommandHandledError } from "./lib/command-handled.js";
 import { renderCommandHeading } from "./lib/format-utils.js";
 import { sanitizeDisplayText } from "./lib/display-sanitize.js";
 import {
@@ -179,6 +179,10 @@ interface CommandExecuteInput {
   command: string;
   arguments?: string;
   sessionID: string;
+}
+
+interface CommandExecuteOutput {
+  parts: unknown[];
 }
 
 /** Config hook shape used to register built-in commands */
@@ -1587,6 +1591,7 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
       formatStatusCommand({
         ...reportData,
         generatedAtMs,
+        percentDisplayMode: runtime.config.percentDisplayMode,
       }),
     );
   }
@@ -2024,7 +2029,7 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
       }
     },
 
-    "command.execute.before": async (input: CommandExecuteInput) => {
+    "command.execute.before": async (input: CommandExecuteInput, output?: CommandExecuteOutput) => {
       try {
         const cmd = input.command;
         const isHandledSlashCommand =
@@ -2069,9 +2074,13 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
           return await handleStatusProviderInfoSlashCommand(input);
         }
       } catch (err) {
-        // IMPORTANT: do not swallow command-handled sentinel errors.
-        // In OpenCode 1.2.15, if this hook resolves, SessionPrompt.command()
-        // proceeds to prompt(...) and can invoke the tool/LLM path.
+        if (isCommandHandledError(err) && output?.parts) {
+          // OpenCode now surfaces thrown AbortError values from command hooks.
+          // We already injected no-reply output above, so clear the command
+          // prompt parts and resolve cleanly to avoid a visible error.
+          output.parts.splice(0, output.parts.length);
+          return;
+        }
         throw err;
       }
     },

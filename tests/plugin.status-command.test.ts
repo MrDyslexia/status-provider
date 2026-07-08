@@ -291,7 +291,7 @@ describe("/status command behavior", () => {
     expect(message).not.toContain("81% left");
   });
 
-  it("keeps /status remaining-oriented when percentDisplayMode is used", async () => {
+  it("applies percentDisplayMode to /status output", async () => {
     mocks.loadConfig.mockResolvedValueOnce({
       ...DEFAULT_CONFIG,
       enabled: true,
@@ -326,8 +326,8 @@ describe("/status command behavior", () => {
 
     expect(client.session.prompt).toHaveBeenCalledTimes(1);
     const injected = getPromptText(client);
-    expect(injected).toContain("81% left");
-    expect(injected).not.toContain("19% left");
+    expect(injected).toContain("19% used");
+    expect(injected).not.toContain("81% left");
   });
 
   it("rewrites default_agent only when one zero-width-normalized key matches", async () => {

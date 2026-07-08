@@ -91,10 +91,10 @@ Clean-start policy: `status-provider` does not migrate legacy config automatical
 ```bash
 bun run typecheck
 bun run build
-bun test
+bun run test
 ```
 
-Known test caveat: some inherited tests use Vitest APIs that are not available in Bun's test runner. Those tests need follow-up cleanup before the full suite can be considered authoritative.
+Tests run through Vitest via `bun run test`; do not use Bun's built-in test runner for this suite.
 
 ## Publishing Readiness
 

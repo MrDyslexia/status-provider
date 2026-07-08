@@ -21,3 +21,7 @@
 ## Release & Repository
 1. **[2026-07-04] Project identity is independent**
    Do instead: keep public identity as `status-provider` version `0.1.0`, with lineage documented in `LINEAGE.md` and no fork branding.
+
+## User Directives
+1. **[2026-07-05] Interactive CLI wizard is tested via browser**
+   Do instead: validate `status-provider config` (and other interactive prompt flows) by driving the sandbox TUI through the browser skill, either `http://127.0.0.1:3002` or `https://m1.blocktype.cl/`. Do not assume typecheck/build/test alone verify prompt-flow behavior.

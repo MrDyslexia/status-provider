@@ -29,7 +29,6 @@ references/*
 !references/upstream-plugins/
 !references/upstream-plugins/**
 .git.backup-*/
-docs/
 AGENTS.md
 /images
 /.agents

@@ -2,27 +2,28 @@
 
 OpenCode plugin and CLI for provider usage status across AI providers.
 
-`status-provider` renders provider quota/status windows in OpenCode popups, TUI sidebar panels, compact status surfaces, slash commands, and CLI output. It supports configurable provider ordering, display variants, session token summaries, pricing diagnostics, and provider-specific availability checks.
+`status-provider` renders quota/status windows in OpenCode popups, TUI sidebar panels, compact status surfaces, slash commands, and CLI output. It supports configurable provider ordering, display variants, session token summaries, pricing diagnostics, and provider-specific availability checks.
 
-## Status
+## Install
 
-Initial independent release line: `0.1.x`.
+### npm
 
-This project is a clean-history successor derived from prior fork work, but it is maintained as an independent project with its own package identity, config path, commands, docs, and release policy.
+```bash
+npx status-provider init
+```
 
-## First Steps
+### Bun
 
-### Local install
+```bash
+bun add -g status-provider
+status-provider init
+```
+
+### Local dev
 
 ```bash
 bun install
 bun run build
-```
-
-### Quick config
-
-```bash
-status-provider config
 ```
 
 ### Inside container
@@ -33,23 +34,30 @@ Use this when working from `plugin-status-provider`:
 bun /plugin/status-provider/dist/bin/status-provider.js config
 ```
 
+## Quick start
+
+```bash
+status-provider init
+status-provider show
+status-provider config
+```
+
+Then open OpenCode and use:
+
+- `/status-provider` — inject a provider status glance into chat
+- `/status-provider-toast` — force-show the popup toast now
+- `/status-provider-info` — diagnostics, pricing, config paths, and provider availability
+
 ## CLI
 
 ```bash
 status-provider --help
 status-provider init
-status-provider show
-status-provider config
-status-provider config --dry-run
+status-provider show [--provider <provider-id>]
+status-provider config [--dry-run]
 ```
 
-## OpenCode Commands
-
-- `/status-provider` — provider status output injected into chat
-- `/status-provider-toast` — force-show the actual popup toast right now, bypassing cache/interval
-- `/status-provider-info` — diagnostics, pricing, config paths, and provider availability
-
-## Config
+## Configuration
 
 Primary config path:
 
@@ -59,7 +67,13 @@ Primary config path:
 
 `config-root` follows OpenCode config resolution. If `OPENCODE_CONFIG_DIR` is set, that directory is used as the root.
 
-Example:
+The config wizard can build a starting point for both sidebar and toast styling:
+
+```bash
+status-provider config
+```
+
+Example config:
 
 ```json
 {
@@ -82,9 +96,17 @@ Example:
 }
 ```
 
-`textVariant`/`providerNameVariant`/`percentVariant`/`colorVariant`/`alignmentVariant` control the TUI sidebar panel and the `/status-provider` CLI/slash command output. The `toast*` counterparts control popup toasts independently — `status-provider config` can copy the sidebar choices as a starting point for the toast section, or configure it from scratch.
+Sidebar + `/status-provider` output use `textVariant`, `providerNameVariant`, `percentVariant`, `colorVariant`, and `alignmentVariant`. Toasts use the `toast*` copies independently. `status-provider config` can copy sidebar choices into toast settings or let you tune them separately.
 
 Clean-start policy: `status-provider` does not migrate legacy config automatically.
+
+## Visual examples
+
+TUI sidebar panel, `default` text variant (classic layout):
+
+![Sidebar default variant](docs/images/sidebar-variant-a-classic.png)
+
+More variants (`minimal`, `box`, `emoji`, provider name styles, color modes) can be generated locally with `status-provider config`, which renders a live preview before saving.
 
 ## Development
 
@@ -96,9 +118,15 @@ bun run test
 
 Tests run through Vitest via `bun run test`; do not use Bun's built-in test runner for this suite.
 
-## Publishing Readiness
+## Status
 
-The package is prepared for future npm/Bun publication as `status-provider`, with a single binary named `status-provider`.
+Initial independent release line: `0.1.x`.
+
+This project is a clean-history successor derived from prior fork work, but it is maintained as an independent project with its own package identity, config path, commands, docs, and release policy.
+
+## Publishing readiness
+
+The package is prepared for npm/Bun publication as `status-provider`, with a single binary named `status-provider`.
 
 ## License
 

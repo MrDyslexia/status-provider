@@ -140,7 +140,7 @@ truth for these values and defaults.
 | `formatStyle` | `singleWindow`, `allWindows` | `singleWindow` | `singleWindow` collapses each provider to one row; `allWindows` shows every quota window (e.g. 5-hour + weekly) per provider. |
 | `percentDisplayMode` | `remaining`, `used` | `remaining` | Whether the percentage shown means "% left" or "% consumed". |
 | `textVariant` | `default`, `minimal`, `box`, `emoji` | `default` | Row layout style — see mockups below. |
-| `providerNameVariant` | `full`, `short`, `icon` | `full` | `full` prints the full name (e.g. "Anthropic"); `short` prints an abbreviation (e.g. "Anth"); `icon` prefixes a symbol before the short name (e.g. "◆ Anth"). |
+| `providerNameVariant` | `full`, `short`, `icon` | `full` | `full` prints the provider's display name (e.g. "Synthetic"); `short` prints an abbreviation (e.g. "Synth"); `icon` prefixes a symbol before the short name (e.g. "◇ Synth"). **Known quirk:** Anthropic's internal group name is `Claude` (not `Anthropic`), which isn't recognized by the name lookup — so this setting currently has no visible effect on the Anthropic row; it always renders as `[Claude]` regardless of variant (confirmed against real output). |
 | `percentVariant` | `number`, `bar`, `both` | `both` | `number` shows just `72%`; `bar` shows just a progress bar; `both` shows bar + percentage. Note: in the sidebar, `bar` and `both` currently render identically. |
 | `colorVariant` | `auto`, `none` | `none` | `auto` colors rows by remaining status. Has **no visible effect in the sidebar** (ANSI is stripped there) — it only changes toast and CLI output. |
 | `alignmentVariant` | `left`, `right` | `left` | Row alignment. Only affects `minimal` text variant; other text variants ignore it. |
@@ -155,12 +155,24 @@ box       ┌ Copilot ────────── 72% ┐
 emoji     🟢 Copilot  [██████████    ]  72%
 ```
 
-`providerNameVariant`:
+`providerNameVariant` (shown on the grouped multi-window header used by
+`formatStyle: allWindows`, e.g. for the Synthetic provider):
 
 ```text
-full   Anthropic  [███████       ]  54%
-short  Anth       [███████       ]  54%
-icon   ◆ Anth     [███████       ]  54%
+full   [Synthetic]
+short  [Synth]
+icon   [◇ Synth]
+```
+
+Real captured output for Anthropic looks like this regardless of
+`providerNameVariant` (the quirk noted in the table above):
+
+```text
+[Claude]
+Session                        1h 8m
+█████████████████████░░░░░  82% used
+Weekly                      4d 6h 8m
+███████████░░░░░░░░░░░░░░░  41% used
 ```
 
 The most reliable way to see any specific combination rendered for real is

@@ -5,9 +5,9 @@
    │            status-provider            │
    │   quota gauges for your AI providers  │
    └──────────────────────────────────────┘
-        Copilot   [██████████░░░░]  72%
-        OpenAI    [███████░░░░░░░]  54%
-        Google    [███░░░░░░░░░░░]  23%
+        Copilot   [██████████    ]  72%
+        OpenAI    [███████       ]  54%
+        Google    [███           ]  23%
              — right inside OpenCode —
 ```
 
@@ -149,18 +149,18 @@ Illustrative mockups of `textVariant` (not real screenshots — generate your
 own with the `status-provider config` live preview to see exact output):
 
 ```text
-default   Copilot  [██████████░░░░]  72%
+default   Copilot  [██████████    ]  72%
 minimal   Copilot 72%
 box       ┌ Copilot ────────── 72% ┐
-emoji     🟢 Copilot  [██████████░░░░]  72%
+emoji     🟢 Copilot  [██████████    ]  72%
 ```
 
 `providerNameVariant`:
 
 ```text
-full   OpenAI   [███████░░░░░░░]  54%
-short  OpenAI   [███████░░░░░░░]  54%
-icon   ◎ OpenAI [███████░░░░░░░]  54%
+full   OpenAI   [███████       ]  54%
+short  OpenAI   [███████       ]  54%
+icon   ◎ OpenAI [███████       ]  54%
 ```
 
 The most reliable way to see any specific combination rendered for real is
@@ -357,8 +357,8 @@ Sidebar & CLI display
 ┌────────────────────────────────────┐
 │ Sidebar preview                     │
 ├────────────────────────────────────┤
-│ Copilot  [██████████░░░░]  72%      │
-│ OpenAI   [█████░░░░░░░░░]  34%      │
+│ Copilot  [██████████    ]  72%      │
+│ OpenAI   [█████         ]  34%      │
 └────────────────────────────────────┘
 
 Toast popup display
@@ -370,8 +370,8 @@ Toast popup display
 ┌────────────────────────────────────┐
 │ Toast preview                       │
 ├────────────────────────────────────┤
-│ Copilot  [██████████░░░░]  72%      │
-│ OpenAI   [█████░░░░░░░░░]  34%      │
+│ Copilot  [██████████    ]  72%      │
+│ OpenAI   [█████         ]  34%      │
 └────────────────────────────────────┘
 
 Preview

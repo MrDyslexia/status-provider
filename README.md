@@ -164,17 +164,6 @@ short  [Synth]
 icon   [◇ Synth]
 ```
 
-Real captured output for Anthropic looks like this regardless of
-`providerNameVariant` (the quirk noted in the table above):
-
-```text
-[Claude]
-Session                        1h 8m
-█████████████████████░░░░░  82% used
-Weekly                      4d 6h 8m
-███████████░░░░░░░░░░░░░░░  41% used
-```
-
 The most reliable way to see any specific combination rendered for real is
 to run `status-provider config` — it shows a live boxed preview of your
 exact settings before you save anything (see the wizard transcript below).

@@ -504,6 +504,11 @@ remains useful as historical reference; upstream changes may be reviewed
 manually when useful, but they are not merged automatically. See
 [LINEAGE.md](LINEAGE.md) for details.
 
+Friendly credit where it is due: this plugin started from
+[`slkiser/opencode-quota`](https://github.com/slkiser/opencode-quota), created
+by `slkiser` and released under the MIT License. `status-provider` simply grew
+from that foundation into the shape I needed for my own OpenCode workflow.
+
 ## Publishing readiness
 
 The package is prepared for npm/Bun publication as `status-provider`, with a

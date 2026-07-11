@@ -22,8 +22,12 @@ export function attemptedResult(
   };
 }
 
-export function attemptedErrorResult(label: string, message: string): StatusProviderResult {
-  return attemptedResult([], [{ label, message }]);
+export function attemptedErrorResult(
+  label: string,
+  message: string,
+  options?: { retryable?: boolean },
+): StatusProviderResult {
+  return attemptedResult([], [{ label, message, ...(options?.retryable ? { retryable: true } : {}) }]);
 }
 
 /**
@@ -45,7 +49,7 @@ export function attemptedRateLimitedResult(params: {
 }
 
 export function mapNullableProviderResult<TSuccess extends { success: true }>(
-  result: TSuccess | { success: false; error: string } | null,
+  result: TSuccess | { success: false; error: string; retryable?: boolean } | null,
   params: {
     errorLabel: string;
     onSuccess: (result: TSuccess) => StatusProviderResult;
@@ -56,7 +60,7 @@ export function mapNullableProviderResult<TSuccess extends { success: true }>(
   }
 
   if (!result.success) {
-    return attemptedErrorResult(params.errorLabel, result.error);
+    return attemptedErrorResult(params.errorLabel, result.error, { retryable: result.retryable });
   }
 
   return params.onSuccess(result);

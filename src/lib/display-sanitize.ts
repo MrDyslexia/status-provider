@@ -70,6 +70,7 @@ export function sanitizeStatusProviderError(error: StatusProviderError): StatusP
   return {
     label: sanitizeDisplayText(error.label),
     message: sanitizeDisplayText(error.message),
+    ...(error.retryable ? { retryable: true } : {}),
   };
 }
 

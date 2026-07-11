@@ -1,0 +1,22 @@
+FROM localhost/vforge-sandbox
+
+# Clean user sandbox: simulate a normal user machine with a fresh opencode CLI.
+# It intentionally does not install status-provider, mount this repo, or copy host auth.
+ARG OPENCODE_CLI_VERSION=1.17.15
+RUN npm install -g opencode-ai@${OPENCODE_CLI_VERSION}
+
+COPY ttyd /usr/local/bin/ttyd
+RUN chmod +x /usr/local/bin/ttyd
+
+COPY clean-user-sandbox/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENV HOME=/sandbox
+WORKDIR /sandbox
+EXPOSE 3002
+
+ENTRYPOINT ["ttyd", \
+  "--port", "3002", \
+  "--interface", "0.0.0.0", \
+  "--writable", \
+  "/usr/local/bin/entrypoint.sh"]

@@ -636,6 +636,8 @@ export interface GoogleStatusResult {
 export interface StatusError {
   success: false;
   error: string;
+  /** True when the failure is a transient auth issue expected to self-heal. */
+  retryable?: boolean;
 }
 
 /** Combined status result */

@@ -47,6 +47,23 @@ function maybeColor(text: string, percent: number, colorVariant: StatusProviderC
   return colorVariant === "auto" ? `${colorForPercent(percent)}${text}${ANSI_RESET}` : text;
 }
 
+/**
+ * Render an error row. Retryable errors (a token refresh/backoff in
+ * progress, expected to self-heal on its own) get a "reauthenticating"
+ * marker and yellow color instead of looking like a permanent failure.
+ */
+function formatStatusErrorLine(
+  err: StatusProviderError,
+  colorVariant: StatusProviderConfig["colorVariant"],
+): string {
+  if (!err.retryable) {
+    return `${err.label}: ${err.message}`;
+  }
+
+  const text = `⏳ ${err.label}: reauthenticating… (${err.message})`;
+  return colorVariant === "auto" ? `${ANSI_YELLOW}${text}${ANSI_RESET}` : text;
+}
+
 function applyProviderNameVariant(
   entry: StatusProviderEntry,
   variant: StatusProviderNameVariant,
@@ -329,9 +346,12 @@ export function formatStatusRows(params: {
     }
   }
 
-  // Add error rows (rendered as "label: message")
+  // Add error rows (rendered as "label: message"). Retryable errors (a
+  // token refresh/backoff in progress) get a distinct "reauthenticating"
+  // marker instead of looking like a hard failure, since they are expected
+  // to clear on their own within a few seconds.
   for (const err of params.errors ?? []) {
-    lines.push(`${err.label}: ${err.message}`);
+    lines.push(formatStatusErrorLine(err, colorVariant));
   }
 
   // Add session token section (if data available and non-empty)

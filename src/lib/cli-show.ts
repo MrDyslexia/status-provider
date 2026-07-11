@@ -109,7 +109,7 @@ function resolveCliRoots(cwd: string): { workspaceRoot: string; configRoot: stri
   };
 }
 
-function createCliStatusClient(params: { configRootDir: string }): StatusRuntimeClient {
+export function createCliStatusClient(params: { configRootDir: string }): StatusRuntimeClient {
   let configPromise: Promise<Record<string, unknown>> | undefined;
   let providerIdsPromise: Promise<string[]> | undefined;
 

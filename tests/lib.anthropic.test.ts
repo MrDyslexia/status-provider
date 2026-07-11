@@ -16,6 +16,7 @@ import {
   clearReadAuthFileCacheForTests,
   readAuthFileCached,
 } from "../src/lib/opencode-auth.js";
+import { refreshAnthropicAuth } from "../src/lib/anthropic-credentials.js";
 
 vi.mock("child_process", () => ({
   execFile: vi.fn(),
@@ -37,6 +38,16 @@ vi.mock("../src/lib/opencode-auth.js", () => ({
   getAuthPath: vi.fn().mockReturnValue("/nonexistent/auth.json"),
   getAuthPaths: vi.fn().mockReturnValue([]),
 }));
+
+vi.mock("../src/lib/anthropic-credentials.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/lib/anthropic-credentials.js")>();
+  return {
+    ...actual,
+    // Real refresh hits the network/CLI — keep it mocked and let each test
+    // control the outcome explicitly.
+    refreshAnthropicAuth: vi.fn(),
+  };
+});
 
 type ExecSequenceStep = {
   stdout?: string;
@@ -1003,7 +1014,7 @@ describe("hasAnthropicCredentialsConfigured fast path", () => {
     await expect(hasAnthropicCredentialsConfigured()).resolves.toBe(false);
   });
 
-  it("returns false when auth.json OAuth is expired and CLI is missing", async () => {
+  it("attempts an OAuth refresh when auth.json access token is expired, and falls to the CLI probe if the refresh fails", async () => {
     vi.mocked(readAuthFileCached).mockResolvedValue({
       anthropic: {
         type: "oauth",
@@ -1012,6 +1023,7 @@ describe("hasAnthropicCredentialsConfigured fast path", () => {
         expires: Date.now() - 60 * 1000,
       },
     });
+    vi.mocked(refreshAnthropicAuth).mockResolvedValue(null);
     mockExecSequence([
       {
         code: "ENOENT",
@@ -1020,8 +1032,30 @@ describe("hasAnthropicCredentialsConfigured fast path", () => {
     ]);
 
     await expect(hasAnthropicCredentialsConfigured()).resolves.toBe(false);
-    // Slow path was attempted because the fast path returned a non-ok state.
+    expect(refreshAnthropicAuth).toHaveBeenCalled();
+    // Slow path was attempted because the refresh attempt also failed.
     expect(execFileMock).toHaveBeenCalled();
+  });
+
+  it("returns true when auth.json access token is expired but the refresh chain recovers a fresh token (bugfix/status-provider-anthropic-token-refresh)", async () => {
+    vi.mocked(readAuthFileCached).mockResolvedValue({
+      anthropic: {
+        type: "oauth",
+        access: "expired-access-token",
+        refresh: "valid-refresh-token",
+        expires: Date.now() - 60 * 1000,
+      },
+    });
+    vi.mocked(refreshAnthropicAuth).mockResolvedValue({
+      access: "fresh-access-token",
+      refresh: "fresh-refresh-token",
+      expires: Date.now() + 60 * 60 * 1000,
+    });
+
+    await expect(hasAnthropicCredentialsConfigured()).resolves.toBe(true);
+    expect(refreshAnthropicAuth).toHaveBeenCalled();
+    // The CLI probe (slow path) must not run once the refresh succeeds.
+    expect(execFileMock).not.toHaveBeenCalled();
   });
 
   it("returns false when auth.json is malformed and CLI is missing", async () => {

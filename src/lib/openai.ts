@@ -8,7 +8,7 @@
 import type { AuthData, OpenAIOAuthData, StatusError } from "./types.js";
 import { sanitizeDisplaySnippet, sanitizeDisplayText } from "./display-sanitize.js";
 import { fetchWithTimeout } from "./http.js";
-import { readAuthFileCached } from "./opencode-auth.js";
+import { invalidateAuthFileCache, readAuthFileCached } from "./opencode-auth.js";
 import { clampPercent } from "./format-utils.js";
 
 interface RateLimitWindow {
@@ -184,17 +184,19 @@ export async function hasOpenAIOAuthCached(params?: {
   return hasOpenAIOAuth(auth);
 }
 
-export async function queryOpenAIStatus(options: { requestTimeoutMs?: number } = {}): Promise<OpenAIResult> {
-  const auth = await readAuthFileCached({
-    maxAgeMs: DEFAULT_OPENAI_AUTH_CACHE_MAX_AGE_MS,
-  });
-  const resolvedAuth = resolveOpenAIOAuth(auth);
-  if (resolvedAuth.state !== "configured") return null;
+type ConfiguredOpenAIOAuth = Extract<ResolvedOpenAIOAuth, { state: "configured" }>;
 
-  if (resolvedAuth.expiresAt && resolvedAuth.expiresAt < Date.now()) {
-    return { success: false, error: "Token expired" };
-  }
+type OpenAIUsageFetchOutcome =
+  | { kind: "success"; result: Extract<OpenAIResult, { success: true }> }
+  | { kind: "no-data" }
+  | { kind: "auth-error"; status: number; text: string }
+  | { kind: "http-error"; status: number; text: string }
+  | { kind: "network-error"; message: string };
 
+async function fetchOpenAIUsage(
+  resolvedAuth: ConfiguredOpenAIOAuth,
+  requestTimeoutMs?: number,
+): Promise<OpenAIUsageFetchOutcome> {
   try {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${resolvedAuth.accessToken}`,
@@ -206,13 +208,13 @@ export async function queryOpenAIStatus(options: { requestTimeoutMs?: number } =
       headers["ChatGPT-Account-Id"] = accountId;
     }
 
-    const resp = await fetchWithTimeout(OPENAI_USAGE_URL, { headers }, options.requestTimeoutMs);
+    const resp = await fetchWithTimeout(OPENAI_USAGE_URL, { headers }, requestTimeoutMs);
     if (!resp.ok) {
-      const text = await resp.text();
-      return {
-        success: false,
-        error: `OpenAI API error ${resp.status}: ${sanitizeDisplaySnippet(text, 120)}`,
-      };
+      const text = await resp.text().catch(() => "");
+      if (resp.status === 401 || resp.status === 403) {
+        return { kind: "auth-error", status: resp.status, text };
+      }
+      return { kind: "http-error", status: resp.status, text };
     }
 
     const data = (await resp.json()) as OpenAIUsageResponse;
@@ -221,7 +223,7 @@ export async function queryOpenAIStatus(options: { requestTimeoutMs?: number } =
     const codeReview = data.code_review_rate_limit?.primary_window ?? null;
     const credits = data.credits ?? null;
 
-    if (!primary) return { success: false, error: "No status data" };
+    if (!primary) return { kind: "no-data" };
 
     const hourlyRemain = remainingPercent(primary);
     const weeklyRemain = secondary ? remainingPercent(secondary) : undefined;
@@ -239,35 +241,118 @@ export async function queryOpenAIStatus(options: { requestTimeoutMs?: number } =
       : undefined;
 
     return {
-      success: true,
-      label: derivePlanLabel(data.plan_type),
-      email: resolvedAuth.email,
-      windows: {
-        hourly: { percentRemaining: clampPercent(hourlyRemain), resetTimeIso: hourlyResetIso },
-        weekly:
-          weeklyRemain === undefined
-            ? undefined
-            : { percentRemaining: clampPercent(weeklyRemain), resetTimeIso: weeklyResetIso },
-        codeReview:
-          codeReviewRemain === undefined
-            ? undefined
-            : {
-                percentRemaining: clampPercent(codeReviewRemain),
-                resetTimeIso: codeReviewResetIso,
-              },
+      kind: "success",
+      result: {
+        success: true,
+        label: derivePlanLabel(data.plan_type),
+        email: resolvedAuth.email,
+        windows: {
+          hourly: { percentRemaining: clampPercent(hourlyRemain), resetTimeIso: hourlyResetIso },
+          weekly:
+            weeklyRemain === undefined
+              ? undefined
+              : { percentRemaining: clampPercent(weeklyRemain), resetTimeIso: weeklyResetIso },
+          codeReview:
+            codeReviewRemain === undefined
+              ? undefined
+              : {
+                  percentRemaining: clampPercent(codeReviewRemain),
+                  resetTimeIso: codeReviewResetIso,
+                },
+        },
+        credits: credits
+          ? {
+              hasCredits: Boolean(credits.has_credits),
+              unlimited: Boolean(credits.unlimited),
+              balance: credits.balance ?? null,
+            }
+          : undefined,
       },
-      credits: credits
-        ? {
-            hasCredits: Boolean(credits.has_credits),
-            unlimited: Boolean(credits.unlimited),
-            balance: credits.balance ?? null,
-          }
-        : undefined,
     };
   } catch (err) {
     return {
-      success: false,
-      error: sanitizeDisplayText(err instanceof Error ? err.message : String(err)),
+      kind: "network-error",
+      message: err instanceof Error ? err.message : String(err),
     };
   }
+}
+
+/**
+ * Re-read auth.json once, bypassing the short-lived cache, to pick up a
+ * token that may have already been rotated on disk by OpenCode itself (or
+ * another process) without us seeing it yet. status-fork does not own the
+ * OpenAI/ChatGPT OAuth refresh flow — unlike Anthropic, there is no
+ * refresh_token exchange implemented here — so an opportunistic re-read is
+ * the safe way to recover instead of reporting a hard failure for a token
+ * that may already be fresh on disk.
+ */
+async function reReadOpenAIOAuth(): Promise<ConfiguredOpenAIOAuth | null> {
+  invalidateAuthFileCache();
+  const freshAuth = await readAuthFileCached({ maxAgeMs: 0 });
+  const freshResolved = resolveOpenAIOAuth(freshAuth);
+  if (
+    freshResolved.state === "configured" &&
+    (!freshResolved.expiresAt || freshResolved.expiresAt >= Date.now())
+  ) {
+    return freshResolved;
+  }
+  return null;
+}
+
+export async function queryOpenAIStatus(options: { requestTimeoutMs?: number } = {}): Promise<OpenAIResult> {
+  const auth = await readAuthFileCached({
+    maxAgeMs: DEFAULT_OPENAI_AUTH_CACHE_MAX_AGE_MS,
+  });
+  let resolvedAuth = resolveOpenAIOAuth(auth);
+  if (resolvedAuth.state !== "configured") return null;
+
+  if (resolvedAuth.expiresAt && resolvedAuth.expiresAt < Date.now()) {
+    const fresh = await reReadOpenAIOAuth();
+    if (!fresh) {
+      // Locally expired and nothing fresher on disk yet — this is expected
+      // to self-heal once OpenCode's own ChatGPT login rotates the token,
+      // so mark it retryable instead of a hard failure.
+      return { success: false, error: "Token expired", retryable: true };
+    }
+    resolvedAuth = fresh;
+  }
+
+  const outcome = await fetchOpenAIUsage(resolvedAuth, options.requestTimeoutMs);
+
+  if (outcome.kind === "success") {
+    return outcome.result;
+  }
+
+  if (outcome.kind === "no-data") {
+    return { success: false, error: "No status data" };
+  }
+
+  if (outcome.kind === "network-error") {
+    return { success: false, error: sanitizeDisplayText(outcome.message) };
+  }
+
+  if (outcome.kind === "auth-error") {
+    // Mirrors the Anthropic provider's opportunistic-retry pattern: a
+    // locally valid-looking token can still be rejected remotely. Re-check
+    // auth.json once for a rotated token before giving up.
+    const fresh = await reReadOpenAIOAuth();
+    if (fresh && fresh.accessToken !== resolvedAuth.accessToken) {
+      const retryOutcome = await fetchOpenAIUsage(fresh, options.requestTimeoutMs);
+      if (retryOutcome.kind === "success") {
+        return retryOutcome.result;
+      }
+    }
+
+    return {
+      success: false,
+      error: `OpenAI API error ${outcome.status}: ${sanitizeDisplaySnippet(outcome.text, 120)}`,
+      retryable: true,
+    };
+  }
+
+  // Generic (non-auth) HTTP error — not treated as a self-healing auth state.
+  return {
+    success: false,
+    error: `OpenAI API error ${outcome.status}: ${sanitizeDisplaySnippet(outcome.text, 120)}`,
+  };
 }

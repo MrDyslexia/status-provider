@@ -35,3 +35,4 @@ AGENTS.md
 /prompt-exports
 /status-provider
 validation/sandbox-state/
+validation/*/sandbox-state/

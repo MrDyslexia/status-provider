@@ -1474,9 +1474,16 @@ export async function hasAnthropicCredentialsConfigured(
   // another terminal. The auth.json entry is written by companion plugins
   // (such as the absorbed `opencode-anthropic-login-via-cli`) and is the
   // canonical source for OAuth credentials on this fork.
+  //
+  // Bug: an OAuth entry that is present but locally expired used to be
+  // treated the same as "no credentials" here, even though
+  // readClaudeCredentialsAccessTokenFromOpencodeAuth() already knows how to
+  // refresh exactly that state. That mismatch made isAvailable() report
+  // "Unavailable (not detected)" for accounts that were actually valid and
+  // refreshable (see bugfix/status-provider-anthropic-token-refresh).
   try {
-    const authState = await readAnthropicAuthState();
-    if (authState.state === "ok") {
+    const credentials = await readClaudeCredentialsAccessTokenFromOpencodeAuth();
+    if (credentials.state === "configured") {
       return true;
     }
   } catch {
@@ -1485,7 +1492,7 @@ export async function hasAnthropicCredentialsConfigured(
 
   // Slow path: probe the local Claude CLI to detect auth sourced from
   // `~/.claude/.credentials.json` or the macOS Keychain when auth.json has
-  // no entry (or has a stale/expired one we couldn't trust).
+  // no entry (or has a stale/expired one we couldn't refresh).
   try {
     const diagnostics = await getCachedAnthropicLocalDiagnostics(options);
     return diagnostics.installed && diagnostics.authStatus === "authenticated";

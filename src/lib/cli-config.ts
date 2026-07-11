@@ -12,8 +12,49 @@ import {
 import { resolveStatusFormatStyle, getStatusFormatStyleLabel } from "./status-format-style.js";
 import { formatStatusRows } from "./format.js";
 import { TUI_SIDEBAR_LAYOUT, TUI_SIDEBAR_MAX_WIDTH } from "./tui-sidebar-format.js";
+import { createCliStatusClient } from "./cli-show.js";
 import type { StatusProviderConfig } from "./types.js";
-import type { StatusProviderEntry } from "./entries.js";
+import type { StatusProviderContext, StatusProviderEntry } from "./entries.js";
+
+/**
+ * Run real availability detection (the same `isAvailable()` contract used
+ * at runtime) instead of assuming every registered provider is "detected".
+ * Used to build the "auto-detect" provider list for the config wizard so
+ * the custom-order step only offers providers that are actually usable,
+ * matching what the sidebar/toast would show.
+ */
+export async function detectAvailableProviderIds(params: {
+  client: StatusProviderContext["client"];
+  config: StatusProviderConfig;
+}): Promise<string[]> {
+  const ctx: StatusProviderContext = {
+    client: params.client,
+    config: {
+      googleModels: params.config.googleModels,
+      anthropicBinaryPath: params.config.anthropicBinaryPath,
+      alibabaCodingPlanTier: params.config.alibabaCodingPlanTier,
+      cursorPlan: params.config.cursorPlan,
+      cursorIncludedApiUsd: params.config.cursorIncludedApiUsd,
+      cursorBillingCycleStartDay: params.config.cursorBillingCycleStartDay,
+      opencodeGoWindows: params.config.opencodeGoWindows,
+      requestTimeoutMs: params.config.requestTimeoutMs,
+      onlyCurrentModel: false,
+      enabledProviders: "auto",
+    },
+  };
+
+  const results = await Promise.all(
+    getProviders().map(async (provider) => {
+      try {
+        return { id: provider.id, ok: await provider.isAvailable(ctx) };
+      } catch {
+        return { id: provider.id, ok: false };
+      }
+    }),
+  );
+
+  return results.filter((result) => result.ok).map((result) => result.id);
+}
 
 const ESC = "\x1B[";
 
@@ -90,6 +131,7 @@ export async function runCliConfigCommand(options: RunCliConfigCommandOptions = 
   const cwd = resolve(options.cwd ?? process.cwd());
   const roots = resolveCliRoots(cwd);
   const configPath = getStatusProviderConfigPath(roots.configRoot);
+  const cliClient = createCliStatusClient({ configRootDir: roots.configRoot });
 
   const config = await loadConfig(undefined, undefined, { configRootDir: roots.configRoot });
 
@@ -175,13 +217,18 @@ export async function runCliConfigCommand(options: RunCliConfigCommandOptions = 
     let providerOrder: string[] = [];
 
     if (orderMode === "custom") {
+      // Bug: this used to fall back to `getProviders().map((p) => p.id)`
+      // (all ~18 registered providers) for auto-detect mode, without ever
+      // calling isAvailable(). That made the custom-order list show every
+      // registered provider instead of only the ones actually detected on
+      // this machine — run the same detection the runtime toast/sidebar use.
       const activeIds =
         enabledMode === "auto"
-          ? getProviders().map((p) => p.id)
+          ? await detectAvailableProviderIds({ client: cliClient, config })
           : enabledIds.length > 0
             ? enabledIds
             : currentEnabled === "auto"
-              ? getProviders().map((p) => p.id)
+              ? await detectAvailableProviderIds({ client: cliClient, config })
               : currentEnabled;
 
       const initialOrder = config.providerOrder.length > 0

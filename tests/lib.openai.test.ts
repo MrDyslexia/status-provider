@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   readAuthFileCached: vi.fn(),
+  invalidateAuthFileCache: vi.fn(),
 }));
 
 vi.mock("../src/lib/opencode-auth.js", () => ({
   readAuthFileCached: mocks.readAuthFileCached,
+  invalidateAuthFileCache: mocks.invalidateAuthFileCache,
 }));
 
 import {
@@ -54,13 +56,73 @@ describe("openai auth resolution", () => {
     });
   });
 
-  it("returns token expired error when expires is in the past", async () => {
+  it("returns a retryable token-expired error when nothing fresher is on disk", async () => {
+    mocks.readAuthFileCached.mockResolvedValueOnce({
+      openai: { type: "oauth", access: "tok", expires: Date.now() - 1 },
+    });
+    // Opportunistic re-read after detecting the local expiry finds nothing newer.
     mocks.readAuthFileCached.mockResolvedValueOnce({
       openai: { type: "oauth", access: "tok", expires: Date.now() - 1 },
     });
 
     const out = await queryOpenAIStatus();
     expect(out && !out.success ? out.error : "").toContain("Token expired");
+    expect(out && !out.success ? out.retryable : false).toBe(true);
+    expect(mocks.invalidateAuthFileCache).toHaveBeenCalled();
+  });
+
+  it("recovers from a locally expired token when auth.json was rotated in the background", async () => {
+    mocks.readAuthFileCached.mockResolvedValueOnce({
+      openai: { type: "oauth", access: "stale-tok", expires: Date.now() - 1 },
+    });
+    // Opportunistic re-read finds a fresh token someone else already wrote.
+    mocks.readAuthFileCached.mockResolvedValueOnce({
+      openai: { type: "oauth", access: "fresh-tok", expires: Date.now() + 60_000 },
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              plan_type: "plus",
+              rate_limit: {
+                limit_reached: false,
+                primary_window: {
+                  used_percent: 20,
+                  limit_window_seconds: 3600,
+                  reset_after_seconds: 3600,
+                },
+                secondary_window: null,
+              },
+            }),
+            { status: 200 },
+          ),
+      ) as any,
+    );
+
+    const out = await queryOpenAIStatus();
+    expect(out && out.success ? out.windows.hourly?.percentRemaining : -1).toBe(80);
+  });
+
+  it("marks a retryable auth error on 401 and does not crash when no fresher token exists", async () => {
+    mocks.readAuthFileCached.mockResolvedValueOnce({
+      openai: { type: "oauth", access: "tok", expires: Date.now() + 60_000 },
+    });
+    // Opportunistic re-read after the 401 finds the same stale token again.
+    mocks.readAuthFileCached.mockResolvedValueOnce({
+      openai: { type: "oauth", access: "tok", expires: Date.now() + 60_000 },
+    });
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("unauthorized", { status: 401 })) as any,
+    );
+
+    const out = await queryOpenAIStatus();
+    expect(out && !out.success ? out.error : "").toContain("OpenAI API error 401");
+    expect(out && !out.success ? out.retryable : false).toBe(true);
   });
 
   it("reads auth from chatgpt when codex and openai are absent", async () => {

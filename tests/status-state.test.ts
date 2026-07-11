@@ -350,4 +350,64 @@ describe("status-state shared cache", () => {
     await expect(readdir(`${TEST_RUNTIME_ROOT}/cache/status-provider-state`)).rejects.toThrow();
     expect(provider.fetch).toHaveBeenCalledTimes(2);
   });
+
+  it("re-fetches a retryable auth-error result well before the full TTL elapses", async () => {
+    vi.useFakeTimers();
+    try {
+      const { __resetStatusStateForTests, fetchStatusProviderResult } = await import(
+        "../src/lib/status-state.js"
+      );
+      __resetStatusStateForTests();
+
+      const provider = {
+        id: "synthetic",
+        isAvailable: vi.fn(),
+        fetch: vi.fn().mockResolvedValue({
+          attempted: true,
+          entries: [],
+          errors: [{ label: "OpenAI", message: "Token expired", retryable: true }],
+        }),
+      } as any;
+
+      await fetchStatusProviderResult({ provider, ctx: createTestContext(), ttlMs: 300_000 });
+      expect(provider.fetch).toHaveBeenCalledTimes(1);
+
+      // Still well within the 5-minute ttlMs, but past the short retryable-error
+      // window — a plain success/failure would still be served from cache here.
+      await vi.advanceTimersByTimeAsync(11_000);
+
+      await fetchStatusProviderResult({ provider, ctx: createTestContext(), ttlMs: 300_000 });
+      expect(provider.fetch).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("serves a non-retryable error from cache for the full ttlMs like before", async () => {
+    vi.useFakeTimers();
+    try {
+      const { __resetStatusStateForTests, fetchStatusProviderResult } = await import(
+        "../src/lib/status-state.js"
+      );
+      __resetStatusStateForTests();
+
+      const provider = {
+        id: "synthetic",
+        isAvailable: vi.fn(),
+        fetch: vi.fn().mockResolvedValue({
+          attempted: true,
+          entries: [],
+          errors: [{ label: "OpenAI", message: "No status data" }],
+        }),
+      } as any;
+
+      await fetchStatusProviderResult({ provider, ctx: createTestContext(), ttlMs: 300_000 });
+      await vi.advanceTimersByTimeAsync(11_000);
+      await fetchStatusProviderResult({ provider, ctx: createTestContext(), ttlMs: 300_000 });
+
+      expect(provider.fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

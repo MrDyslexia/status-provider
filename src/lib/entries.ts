@@ -63,6 +63,14 @@ export interface StatusProviderError {
   /** Short label that will be rendered as "label: message". */
   label: string;
   message: string;
+  /**
+   * True when this error is a transient auth/token issue that is expected to
+   * self-heal on its own (e.g. an OAuth token refresh in progress or a
+   * backoff window after a rejected token). The cache layer uses this to
+   * shorten how long the error is served, and formatters use it to render a
+   * "reauthenticating" indicator instead of a hard failure.
+   */
+  retryable?: boolean;
 }
 
 /** Per-model token summary for current session (toast display). */

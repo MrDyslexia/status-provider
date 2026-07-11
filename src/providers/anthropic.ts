@@ -41,7 +41,11 @@ export const anthropicProvider: StatusProvider = {
     }
 
     if (!result.success) {
-      const errorResult = attemptedErrorResult("Claude", result.error);
+      // authExpiredUntil marks a token rejected mid-session that status-fork
+      // will keep trying to refresh in the background — surface it as a
+      // transient/self-healing state rather than a hard failure.
+      const isAuthExpired = typeof result.authExpiredUntil === "number";
+      const errorResult = attemptedErrorResult("Claude", result.error, { retryable: isAuthExpired });
       if (typeof result.rateLimitedUntil === "number") {
         return { ...errorResult, rateLimitedUntil: result.rateLimitedUntil };
       }

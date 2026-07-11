@@ -20,6 +20,15 @@ const STATUS_PROVIDER_CACHE_PRUNE_INTERVAL_MS = 60 * 60 * 1000;
  * entries. Covers CLI restart / cache invalidation windows.
  */
 const STATUS_PROVIDER_STALE_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * Errors marked `retryable` (transient auth/token issues expected to
+ * self-heal — e.g. a token refresh in flight) must not be served for the
+ * full `minIntervalMs` window like a normal success/failure would be.
+ * Without this, a single spurious first-attempt failure gets cached and
+ * re-served to every subsequent poll/reload for up to 5 minutes, even though
+ * the underlying token may already be valid again.
+ */
+const RETRYABLE_ERROR_CACHE_TTL_MS = 10_000;
 
 export type PersistedStatusProviderCacheEntry = {
   version: typeof STATUS_PROVIDER_CACHE_VERSION;
@@ -243,7 +252,7 @@ async function readPersistedStatusProviderCacheEntry(params: {
       return null;
     }
 
-    if (params.now - parsed.timestamp >= params.ttlMs) {
+    if (params.now - parsed.timestamp >= resolveCacheTtlMs(parsed.result, params.ttlMs)) {
       return null;
     }
 
@@ -295,6 +304,20 @@ function isEntryRateLimited(
   return typeof until === "number" && until > now;
 }
 
+/** True when any error on the result is marked as a transient/self-healing auth issue. */
+function hasRetryableError(result: StatusProviderResult): boolean {
+  return result.errors.some((error) => error.retryable === true);
+}
+
+/**
+ * Effective freshness window for a cached entry: retryable-error results get
+ * a short-lived TTL so the next normal poll re-fetches instead of re-serving
+ * a stale first-attempt failure for the full configured interval.
+ */
+function resolveCacheTtlMs(result: StatusProviderResult, ttlMs: number): number {
+  return hasRetryableError(result) ? Math.min(ttlMs, RETRYABLE_ERROR_CACHE_TTL_MS) : ttlMs;
+}
+
 export async function fetchStatusProviderResult(params: {
   provider: StatusProvider;
   ctx: StatusProviderContext;
@@ -321,7 +344,8 @@ export async function fetchStatusProviderResult(params: {
     inMemory &&
     inMemory.packageVersion === packageVersion &&
     ttlMs > 0 &&
-    (isEntryRateLimited(inMemory, now) || now - inMemory.timestamp < ttlMs)
+    (isEntryRateLimited(inMemory, now) ||
+      now - inMemory.timestamp < resolveCacheTtlMs(inMemory.result, ttlMs))
   ) {
     return cloneStatusProviderResult(inMemory.result);
   }

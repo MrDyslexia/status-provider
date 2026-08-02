@@ -91,7 +91,7 @@ describe("openai auth resolution", () => {
                 limit_reached: false,
                 primary_window: {
                   used_percent: 20,
-                  limit_window_seconds: 3600,
+                  limit_window_seconds: 18_000,
                   reset_after_seconds: 3600,
                 },
                 secondary_window: null,
@@ -115,10 +115,7 @@ describe("openai auth resolution", () => {
       openai: { type: "oauth", access: "tok", expires: Date.now() + 60_000 },
     });
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("unauthorized", { status: 401 })) as any,
-    );
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("unauthorized", { status: 401 })) as any);
 
     const out = await queryOpenAIStatus();
     expect(out && !out.success ? out.error : "").toContain("OpenAI API error 401");
@@ -141,7 +138,7 @@ describe("openai auth resolution", () => {
                 limit_reached: false,
                 primary_window: {
                   used_percent: 20,
-                  limit_window_seconds: 3600,
+                  limit_window_seconds: 18_000,
                   reset_after_seconds: 3600,
                 },
                 secondary_window: null,
@@ -175,7 +172,7 @@ describe("openai auth resolution", () => {
                 limit_reached: false,
                 primary_window: {
                   used_percent: 50,
-                  limit_window_seconds: 3600,
+                  limit_window_seconds: 18_000,
                   reset_after_seconds: 3600,
                 },
                 secondary_window: null,
@@ -217,12 +214,12 @@ describe("openai auth resolution", () => {
                 limit_reached: false,
                 primary_window: {
                   used_percent: 10,
-                  limit_window_seconds: 3600,
+                  limit_window_seconds: 18_000,
                   reset_after_seconds: 3600,
                 },
                 secondary_window: {
                   used_percent: 70,
-                  limit_window_seconds: 60,
+                  limit_window_seconds: 604_800,
                   reset_after_seconds: 60,
                 },
               },
@@ -235,5 +232,36 @@ describe("openai auth resolution", () => {
     const out = await queryOpenAIStatus();
     expect(out && out.success ? out.windows.hourly?.percentRemaining : -1).toBe(90);
     expect(out && out.success ? out.windows.weekly?.percentRemaining : -1).toBe(30);
+  });
+
+  it("classifies a seven-day primary window as weekly instead of session", async () => {
+    mocks.readAuthFileCached.mockResolvedValueOnce({
+      openai: { type: "oauth", access: "a.b.c", expires: Date.now() + 60_000 },
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              plan_type: "plus",
+              rate_limit: {
+                limit_reached: false,
+                primary_window: {
+                  used_percent: 9,
+                  limit_window_seconds: 604_800,
+                  reset_after_seconds: 604_000,
+                },
+                secondary_window: null,
+              },
+            }),
+            { status: 200 },
+          ),
+      ) as any,
+    );
+
+    const out = await queryOpenAIStatus();
+    expect(out && out.success ? out.windows.hourly : undefined).toBeUndefined();
+    expect(out && out.success ? out.windows.weekly?.percentRemaining : -1).toBe(91);
   });
 });

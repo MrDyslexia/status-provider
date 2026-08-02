@@ -22,8 +22,8 @@ interface OpenAIUsageResponse {
   plan_type: string;
   rate_limit: {
     limit_reached: boolean;
-    primary_window: RateLimitWindow;
-    secondary_window: RateLimitWindow | null;
+    primary_window: unknown;
+    secondary_window: unknown;
   } | null;
   code_review_rate_limit?: {
     primary_window: RateLimitWindow | null;
@@ -73,6 +73,47 @@ function remainingPercent(window: RateLimitWindow): number {
   return clampPercent(100 - window.used_percent);
 }
 
+type OpenAIWindowKind = "hourly" | "weekly" | "monthly";
+
+type OpenAIWindowValue = {
+  percentRemaining: number;
+  resetTimeIso?: string;
+};
+
+function classifyWindowDuration(seconds: number): OpenAIWindowKind | null {
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  if (seconds <= 24 * 60 * 60) return "hourly";
+  if (seconds >= 2 * 24 * 60 * 60 && seconds <= 14 * 24 * 60 * 60) return "weekly";
+  if (seconds >= 21 * 24 * 60 * 60 && seconds <= 35 * 24 * 60 * 60) return "monthly";
+  return null;
+}
+
+function parseRateLimitWindow(
+  value: unknown,
+): { kind: OpenAIWindowKind; value: OpenAIWindowValue } | null {
+  if (!value || typeof value !== "object") return null;
+  const window = value as Partial<RateLimitWindow>;
+  if (
+    typeof window.used_percent !== "number" ||
+    !Number.isFinite(window.used_percent) ||
+    typeof window.limit_window_seconds !== "number"
+  ) {
+    return null;
+  }
+  const kind = classifyWindowDuration(window.limit_window_seconds);
+  if (!kind) return null;
+
+  return {
+    kind,
+    value: {
+      percentRemaining: remainingPercent(window as RateLimitWindow),
+      resetTimeIso:
+        resetIsoFromResetAt(window.reset_at) ??
+        resetIsoFromNowSeconds(window.reset_after_seconds ?? 0),
+    },
+  };
+}
+
 function resetIsoFromNowSeconds(seconds: number): string | undefined {
   if (!Number.isFinite(seconds) || seconds <= 0) return undefined;
   return new Date(Date.now() + Math.round(seconds * 1000)).toISOString();
@@ -105,9 +146,10 @@ export type OpenAIResult =
       label: string;
       email?: string;
       windows: {
-        hourly?: { percentRemaining: number; resetTimeIso?: string };
-        weekly?: { percentRemaining: number; resetTimeIso?: string };
-        codeReview?: { percentRemaining: number; resetTimeIso?: string };
+        hourly?: OpenAIWindowValue;
+        weekly?: OpenAIWindowValue;
+        monthly?: OpenAIWindowValue;
+        codeReview?: OpenAIWindowValue;
       };
       credits?: {
         hasCredits: boolean;
@@ -155,7 +197,8 @@ export function resolveOpenAIOAuth(auth: AuthData | null | undefined): ResolvedO
   }
 
   const email = getEmailFromJwt(resolved.accessToken) ?? undefined;
-  const accountId = getAccountIdFromJwt(resolved.accessToken) ?? resolved.entry.accountId ?? undefined;
+  const accountId =
+    getAccountIdFromJwt(resolved.accessToken) ?? resolved.entry.accountId ?? undefined;
 
   return {
     state: "configured",
@@ -175,9 +218,7 @@ export function hasOpenAIOAuth(auth: AuthData | null | undefined): boolean {
   return resolveOpenAIOAuth(auth).state === "configured";
 }
 
-export async function hasOpenAIOAuthCached(params?: {
-  maxAgeMs?: number;
-}): Promise<boolean> {
+export async function hasOpenAIOAuthCached(params?: { maxAgeMs?: number }): Promise<boolean> {
   const auth = await readAuthFileCached({
     maxAgeMs: Math.max(0, params?.maxAgeMs ?? DEFAULT_OPENAI_AUTH_CACHE_MAX_AGE_MS),
   });
@@ -218,27 +259,30 @@ async function fetchOpenAIUsage(
     }
 
     const data = (await resp.json()) as OpenAIUsageResponse;
-    const primary = data.rate_limit?.primary_window;
-    const secondary = data.rate_limit?.secondary_window ?? null;
+    const primary = parseRateLimitWindow(data.rate_limit?.primary_window);
+    const secondary = parseRateLimitWindow(data.rate_limit?.secondary_window);
     const codeReview = data.code_review_rate_limit?.primary_window ?? null;
     const credits = data.credits ?? null;
 
-    if (!primary) return { kind: "no-data" };
-
-    const hourlyRemain = remainingPercent(primary);
-    const weeklyRemain = secondary ? remainingPercent(secondary) : undefined;
     const codeReviewRemain = codeReview ? remainingPercent(codeReview) : undefined;
-
-    const hourlyResetIso =
-      resetIsoFromResetAt(primary.reset_at) ?? resetIsoFromNowSeconds(primary.reset_after_seconds);
-    const weeklyResetIso = secondary
-      ? (resetIsoFromResetAt(secondary.reset_at) ??
-        resetIsoFromNowSeconds(secondary.reset_after_seconds))
-      : undefined;
     const codeReviewResetIso = codeReview
       ? (resetIsoFromResetAt(codeReview.reset_at) ??
         resetIsoFromNowSeconds(codeReview.reset_after_seconds))
       : undefined;
+
+    const windows: Extract<OpenAIResult, { success: true }>["windows"] = {};
+    for (const parsed of [primary, secondary]) {
+      if (parsed && !windows[parsed.kind]) windows[parsed.kind] = parsed.value;
+    }
+    if (Object.keys(windows).length === 0 && codeReviewRemain === undefined) {
+      return { kind: "no-data" };
+    }
+    if (codeReviewRemain !== undefined) {
+      windows.codeReview = {
+        percentRemaining: clampPercent(codeReviewRemain),
+        resetTimeIso: codeReviewResetIso,
+      };
+    }
 
     return {
       kind: "success",
@@ -246,20 +290,7 @@ async function fetchOpenAIUsage(
         success: true,
         label: derivePlanLabel(data.plan_type),
         email: resolvedAuth.email,
-        windows: {
-          hourly: { percentRemaining: clampPercent(hourlyRemain), resetTimeIso: hourlyResetIso },
-          weekly:
-            weeklyRemain === undefined
-              ? undefined
-              : { percentRemaining: clampPercent(weeklyRemain), resetTimeIso: weeklyResetIso },
-          codeReview:
-            codeReviewRemain === undefined
-              ? undefined
-              : {
-                  percentRemaining: clampPercent(codeReviewRemain),
-                  resetTimeIso: codeReviewResetIso,
-                },
-        },
+        windows,
         credits: credits
           ? {
               hasCredits: Boolean(credits.has_credits),
@@ -299,7 +330,9 @@ async function reReadOpenAIOAuth(): Promise<ConfiguredOpenAIOAuth | null> {
   return null;
 }
 
-export async function queryOpenAIStatus(options: { requestTimeoutMs?: number } = {}): Promise<OpenAIResult> {
+export async function queryOpenAIStatus(
+  options: { requestTimeoutMs?: number } = {},
+): Promise<OpenAIResult> {
   const auth = await readAuthFileCached({
     maxAgeMs: DEFAULT_OPENAI_AUTH_CACHE_MAX_AGE_MS,
   });

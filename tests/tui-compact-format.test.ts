@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { buildCompactStatusStatusLine } from "../src/lib/tui-compact-format.js";
 
 describe("buildCompactStatusStatusLine", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("formats percent entries with text-only remaining percent semantics", () => {
     const line = buildCompactStatusStatusLine({
       percentDisplayMode: "remaining",
@@ -135,28 +139,34 @@ describe("buildCompactStatusStatusLine", () => {
     expect(line).not.toContain("[Copilot] (personal)");
   });
 
-  it("appends a compact reset countdown to a single-window percent entry", () => {
+  it("appends a detailed reset countdown to a single-window percent entry", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
     const line = buildCompactStatusStatusLine({
       percentDisplayMode: "remaining",
       maxWidth: 96,
       data: {
         entries: [
           {
-            name: "Claude Sonnet",
-            group: "Claude",
-            label: "5h:",
-            percentRemaining: 82,
-            resetTimeIso: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+            name: "OpenAI weekly window",
+            group: "OpenAI (pro)",
+            label: "Weekly:",
+            percentRemaining: 36,
+            resetTimeIso: "2026-01-07T15:10:00.000Z",
           },
         ],
         errors: [],
       },
     });
 
-    expect(line).toBe("Claude 82% 4h");
+    expect(line).toBe("OpenAI Pro 36% 6d 15h 10m");
   });
 
-  it("appends a compact reset countdown to each window in a multi-window group", () => {
+  it("appends a detailed reset countdown to each window in a multi-window group", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
     const line = buildCompactStatusStatusLine({
       percentDisplayMode: "remaining",
       maxWidth: 96,
@@ -167,21 +177,21 @@ describe("buildCompactStatusStatusLine", () => {
             group: "OpenAI (pro)",
             label: "5h:",
             percentRemaining: 82,
-            resetTimeIso: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+            resetTimeIso: "2026-01-01T04:00:00.000Z",
           },
           {
             name: "OpenAI weekly window",
             group: "OpenAI (pro)",
             label: "Weekly:",
             percentRemaining: 40,
-            resetTimeIso: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + 60 * 1000).toISOString(),
+            resetTimeIso: "2026-01-04T00:00:00.000Z",
           },
         ],
         errors: [],
       },
     });
 
-    expect(line).toBe("OpenAI Pro 5h 82% 4h, 7d 40% 3d");
+    expect(line).toBe("OpenAI Pro 5h 82% 4h 0m, 7d 40% 3d 0h 0m");
   });
 
   it("omits the reset countdown when the entry is at 100% remaining", () => {
@@ -203,7 +213,10 @@ describe("buildCompactStatusStatusLine", () => {
     expect(line).toBe("Claude Sonnet 100%");
   });
 
-  it("appends a compact reset countdown to value entries when present", () => {
+  it("appends a detailed reset countdown to value entries when present", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
     const line = buildCompactStatusStatusLine({
       percentDisplayMode: "remaining",
       maxWidth: 96,
@@ -213,14 +226,14 @@ describe("buildCompactStatusStatusLine", () => {
             kind: "value",
             name: "Cursor API",
             value: "$2.40 / $20.00",
-            resetTimeIso: new Date(Date.now() + 13 * 24 * 60 * 60 * 1000 + 60 * 1000).toISOString(),
+            resetTimeIso: "2026-01-14T00:00:00.000Z",
           },
         ],
         errors: [],
       },
     });
 
-    expect(line).toBe("Cursor API - $2.40 / $20.00 13d");
+    expect(line).toBe("Cursor API - $2.40 / $20.00 13d 0h 0m");
   });
 
   it("formats value entries without percent mode changing the value", () => {

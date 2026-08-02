@@ -91,7 +91,7 @@ function getWindowLabel(entry: StatusProviderEntry): string | null {
 }
 
 function formatCompactResetLabel(resetTimeIso: string | undefined): string {
-  return formatResetCountdown(resetTimeIso, { compactRounded: true });
+  return formatResetCountdown(resetTimeIso);
 }
 
 function formatCompactValueEntrySegment(

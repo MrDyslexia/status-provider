@@ -831,7 +831,7 @@ describe("tui runtime helpers", () => {
     expect(buildCompactStatusStatusLine).not.toHaveBeenCalled();
   });
 
-  it("loads sidebar and compact session surfaces from one collection", async () => {
+  it("loads sidebar and compact session surfaces with separate issue policies", async () => {
     mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
     writeFileSync(
       join(worktreeDir, "status-provider", "config.json"),
@@ -892,8 +892,9 @@ describe("tui runtime helpers", () => {
       sidebar: { status: "ready", lines: ["Sidebar status"] },
       compact: { status: "ready", text: "Compact status" },
     });
-    expect(collectStatusRenderData).toHaveBeenCalledOnce();
-    expect(collectStatusRenderData).toHaveBeenCalledWith(
+    expect(collectStatusRenderData).toHaveBeenCalledTimes(2);
+    expect(collectStatusRenderData).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         surfaceExplicitProviderIssues: true,
         config: expect.objectContaining({
@@ -906,6 +907,16 @@ describe("tui runtime helpers", () => {
             providerID: "copilot",
             modelID: "gpt-4.1",
           },
+        }),
+      }),
+    );
+    expect(collectStatusRenderData).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        surfaceExplicitProviderIssues: false,
+        config: expect.objectContaining({
+          onlyCurrentModel: true,
+          showSessionTokens: false,
         }),
       }),
     );
@@ -988,7 +999,10 @@ describe("tui runtime helpers", () => {
     );
     expect(collectStatusRenderData.mock.calls[1]![0]).toEqual(
       expect.objectContaining({
-        config: expect.objectContaining({ onlyCurrentModel: true }),
+        config: expect.objectContaining({
+          onlyCurrentModel: true,
+          showSessionTokens: false,
+        }),
         request: expect.objectContaining({
           sessionMeta: { providerID: "anthropic", modelID: "claude-sonnet-5" },
         }),

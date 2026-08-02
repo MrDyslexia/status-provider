@@ -126,7 +126,8 @@ export function matchesStatusProviderCurrentSelection(params: {
   currentProviderID?: string;
   enabledProviders?: string[] | "auto";
 }): boolean {
-  if (!params.currentModel && params.currentProviderID) {
+  const hasQualifiedModel = params.currentModel?.includes("/") ?? false;
+  if (params.currentProviderID && !hasQualifiedModel) {
     const normalizedCurrentProviderID = normalizeStatusProviderId(params.currentProviderID);
     if (params.provider.id === normalizedCurrentProviderID) {
       return true;

@@ -11,9 +11,7 @@ vi.mock("../src/providers/registry.js", () => ({
   getProviders: () => mockProviders,
   getOrderedProviders: (config: { enabledProviders: unknown }) => {
     if (!config || config.enabledProviders === "auto") return mockProviders;
-    const enabled = new Set(
-      Array.isArray(config.enabledProviders) ? config.enabledProviders : [],
-    );
+    const enabled = new Set(Array.isArray(config.enabledProviders) ? config.enabledProviders : []);
     return mockProviders.filter((p: { id: string }) => enabled.has(p.id));
   },
 }));
@@ -294,6 +292,40 @@ describe("collectStatusRenderData shared status state", () => {
         currentProviderID: "minimax-cn-coding-plan",
       }),
     ).toBe(true);
+  });
+
+  it("prioritizes an exact provider ID only when the model ID has no provider prefix", () => {
+    const provider = {
+      id: "openai",
+      matchesCurrentModel: vi.fn().mockReturnValue(false),
+    };
+
+    expect(
+      matchesStatusProviderCurrentSelection({
+        provider: provider as any,
+        currentModel: "gpt-5.5-fast",
+        currentProviderID: "openai",
+      }),
+    ).toBe(true);
+    expect(provider.matchesCurrentModel).not.toHaveBeenCalled();
+  });
+
+  it("uses a qualified model ID even when the provider ID matches", () => {
+    const provider = {
+      id: "openai",
+      matchesCurrentModel: vi.fn().mockReturnValue(false),
+    };
+
+    expect(
+      matchesStatusProviderCurrentSelection({
+        provider: provider as any,
+        currentModel: "openai/gpt-4.1",
+        currentProviderID: "openai",
+      }),
+    ).toBe(false);
+    expect(provider.matchesCurrentModel).toHaveBeenCalledWith("openai/gpt-4.1", {
+      enabledProviders: "auto",
+    });
   });
 
   it("passes explicit enabledProviders context into current-model matching", () => {

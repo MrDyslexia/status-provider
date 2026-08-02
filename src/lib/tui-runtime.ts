@@ -213,6 +213,7 @@ function buildSidebarPanelFromData(params: {
 async function collectTuiStatusRenderData(params: {
   runtime: StatusRuntimeContext;
   request: ReturnType<typeof createStatusRuntimeRequestContext>;
+  surfaceExplicitProviderIssues?: boolean;
 }): Promise<{
   result: CollectStatusRenderDataResult;
   formatStyle: ReturnType<typeof resolveStatusFormatStyle>;
@@ -223,7 +224,7 @@ async function collectTuiStatusRenderData(params: {
     config: params.runtime.config,
     configMeta: params.runtime.configMeta,
     request: params.request,
-    surfaceExplicitProviderIssues: true,
+    surfaceExplicitProviderIssues: params.surfaceExplicitProviderIssues ?? true,
     formatStyle,
     providers: params.runtime.providers,
   });
@@ -278,8 +279,15 @@ function shouldIncludeSessionMetaForSurfaces(config: StatusRuntimeContext["confi
 }
 
 function buildCompactOnlyCurrentModelRuntime(runtime: StatusRuntimeContext): StatusRuntimeContext {
-  if (runtime.config.onlyCurrentModel) return runtime;
-  return { ...runtime, config: { ...runtime.config, onlyCurrentModel: true } };
+  if (runtime.config.onlyCurrentModel && !runtime.config.showSessionTokens) return runtime;
+  return {
+    ...runtime,
+    config: {
+      ...runtime.config,
+      onlyCurrentModel: true,
+      showSessionTokens: false,
+    },
+  };
 }
 
 export async function loadTuiSessionStatusSurfaces(params: {
@@ -303,7 +311,6 @@ export async function loadTuiSessionStatusSurfaces(params: {
   }
 
   const compactRuntime = buildCompactOnlyCurrentModelRuntime(runtime);
-  const sharesSidebarCollection = compactRuntime === runtime;
 
   const sidebarPromise = sidebarEnabled
     ? collectTuiStatusRenderData({ runtime, request: createStatusRuntimeRequestContext(runtime) })
@@ -311,12 +318,11 @@ export async function loadTuiSessionStatusSurfaces(params: {
 
   const compactPromise = !compactEnabled
     ? undefined
-    : sharesSidebarCollection && sidebarPromise
-      ? sidebarPromise
-      : collectTuiStatusRenderData({
-          runtime: compactRuntime,
-          request: createStatusRuntimeRequestContext(compactRuntime),
-        });
+    : collectTuiStatusRenderData({
+        runtime: compactRuntime,
+        request: createStatusRuntimeRequestContext(compactRuntime),
+        surfaceExplicitProviderIssues: false,
+      });
 
   const [sidebarCollected, compactCollected] = await Promise.all([sidebarPromise, compactPromise]);
 

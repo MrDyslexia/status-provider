@@ -50,7 +50,12 @@ describe("buildCompactStatusStatusLine", () => {
       data: {
         entries: [
           { name: "Gemini Pro", group: "Gemini CLI", label: "Gemini Pro:", percentRemaining: 20 },
-          { name: "Gemini Flash", group: "Gemini CLI", label: "Gemini Flash:", percentRemaining: 50 },
+          {
+            name: "Gemini Flash",
+            group: "Gemini CLI",
+            label: "Gemini Flash:",
+            percentRemaining: 50,
+          },
           {
             name: "Gemini Flash Lite",
             group: "Gemini CLI",
@@ -130,6 +135,94 @@ describe("buildCompactStatusStatusLine", () => {
     expect(line).not.toContain("[Copilot] (personal)");
   });
 
+  it("appends a compact reset countdown to a single-window percent entry", () => {
+    const line = buildCompactStatusStatusLine({
+      percentDisplayMode: "remaining",
+      maxWidth: 96,
+      data: {
+        entries: [
+          {
+            name: "Claude Sonnet",
+            group: "Claude",
+            label: "5h:",
+            percentRemaining: 82,
+            resetTimeIso: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+          },
+        ],
+        errors: [],
+      },
+    });
+
+    expect(line).toBe("Claude 82% 4h");
+  });
+
+  it("appends a compact reset countdown to each window in a multi-window group", () => {
+    const line = buildCompactStatusStatusLine({
+      percentDisplayMode: "remaining",
+      maxWidth: 96,
+      data: {
+        entries: [
+          {
+            name: "OpenAI rolling window",
+            group: "OpenAI (pro)",
+            label: "5h:",
+            percentRemaining: 82,
+            resetTimeIso: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+          },
+          {
+            name: "OpenAI weekly window",
+            group: "OpenAI (pro)",
+            label: "Weekly:",
+            percentRemaining: 40,
+            resetTimeIso: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+          },
+        ],
+        errors: [],
+      },
+    });
+
+    expect(line).toBe("OpenAI Pro 5h 82% 4h, 7d 40% 3d");
+  });
+
+  it("omits the reset countdown when the entry is at 100% remaining", () => {
+    const line = buildCompactStatusStatusLine({
+      percentDisplayMode: "remaining",
+      maxWidth: 96,
+      data: {
+        entries: [
+          {
+            name: "Claude Sonnet",
+            percentRemaining: 100,
+            resetTimeIso: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+          },
+        ],
+        errors: [],
+      },
+    });
+
+    expect(line).toBe("Claude Sonnet 100%");
+  });
+
+  it("appends a compact reset countdown to value entries when present", () => {
+    const line = buildCompactStatusStatusLine({
+      percentDisplayMode: "remaining",
+      maxWidth: 96,
+      data: {
+        entries: [
+          {
+            kind: "value",
+            name: "Cursor API",
+            value: "$2.40 / $20.00",
+            resetTimeIso: new Date(Date.now() + 13 * 24 * 60 * 60 * 1000).toISOString(),
+          },
+        ],
+        errors: [],
+      },
+    });
+
+    expect(line).toBe("Cursor API - $2.40 / $20.00 13d");
+  });
+
   it("formats value entries without percent mode changing the value", () => {
     const remaining = buildCompactStatusStatusLine({
       percentDisplayMode: "remaining",
@@ -184,7 +277,15 @@ describe("buildCompactStatusStatusLine", () => {
         ],
         errors: [],
         sessionTokens: {
-          models: [{ modelID: "openai/gpt-5", input: 12_400, cachedInput: 5_600, totalInput: 18_000, output: 3_100 }],
+          models: [
+            {
+              modelID: "openai/gpt-5",
+              input: 12_400,
+              cachedInput: 5_600,
+              totalInput: 18_000,
+              output: 3_100,
+            },
+          ],
           totalInput: 12_400,
           totalCachedInput: 5_600,
           totalCombinedInput: 18_000,

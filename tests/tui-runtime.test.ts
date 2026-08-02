@@ -3,13 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { collectStatusRenderData, buildCompactStatusStatusLine, buildSidebarStatusPanelLines } = vi.hoisted(
-  () => ({
+const { collectStatusRenderData, buildCompactStatusStatusLine, buildSidebarStatusPanelLines } =
+  vi.hoisted(() => ({
     collectStatusRenderData: vi.fn(),
     buildCompactStatusStatusLine: vi.fn(),
     buildSidebarStatusPanelLines: vi.fn(),
-  }),
-);
+  }));
 
 vi.mock("../src/lib/status-render-data.js", async () => {
   const actual = await vi.importActual<typeof import("../src/lib/status-render-data.js")>(
@@ -921,6 +920,137 @@ describe("tui runtime helpers", () => {
       percentDisplayMode: "used",
       maxWidth: 42,
     });
+  });
+
+  it("fetches compact independently from sidebar when only the compact surface filters to the current model", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
+    writeFileSync(
+      join(worktreeDir, "status-provider", "config.json"),
+      JSON.stringify({
+        enabled: true,
+        tuiCompactStatus: {
+          enabled: true,
+          sessionPrompt: true,
+        },
+      }),
+      "utf8",
+    );
+
+    const sidebarData = {
+      entries: [{ name: "Copilot", percentRemaining: 50 }],
+      errors: [],
+      sessionTokens: undefined,
+    };
+    const compactData = {
+      entries: [{ name: "Claude", percentRemaining: 82 }],
+      errors: [],
+      sessionTokens: undefined,
+    };
+
+    collectStatusRenderData.mockImplementation(async ({ config }) =>
+      config.onlyCurrentModel ? { data: compactData } : { data: sidebarData },
+    );
+    buildSidebarStatusPanelLines.mockReturnValue(["Sidebar status"]);
+    buildCompactStatusStatusLine.mockReturnValue("Claude 82%");
+
+    const surfaces = await loadTuiSessionStatusSurfaces({
+      api: {
+        state: {
+          provider: [],
+          path: {
+            worktree: worktreeDir,
+            directory: nestedDir,
+          },
+          session: {
+            messages: () => [],
+          },
+        },
+        client: {
+          session: {
+            get: vi.fn().mockResolvedValue({
+              data: { providerID: "anthropic", modelID: "claude-sonnet-5" },
+            }),
+          },
+        },
+      } as any,
+      sessionID: "independent-filtering",
+    });
+
+    expect(surfaces).toEqual({
+      sidebar: { status: "ready", lines: ["Sidebar status"] },
+      compact: { status: "ready", text: "Claude 82%" },
+    });
+    expect(collectStatusRenderData).toHaveBeenCalledTimes(2);
+    expect(collectStatusRenderData.mock.calls[0]![0]).toEqual(
+      expect.objectContaining({
+        config: expect.objectContaining({ onlyCurrentModel: false }),
+      }),
+    );
+    expect(collectStatusRenderData.mock.calls[1]![0]).toEqual(
+      expect.objectContaining({
+        config: expect.objectContaining({ onlyCurrentModel: true }),
+        request: expect.objectContaining({
+          sessionMeta: { providerID: "anthropic", modelID: "claude-sonnet-5" },
+        }),
+      }),
+    );
+    expect(buildSidebarStatusPanelLines).toHaveBeenCalledWith(
+      expect.objectContaining({ data: sidebarData }),
+    );
+    expect(buildCompactStatusStatusLine).toHaveBeenCalledWith(
+      expect.objectContaining({ data: compactData }),
+    );
+  });
+
+  it("shows compact loading while sidebar stays ready when the session has no resolved model yet", async () => {
+    mkdirSync(join(worktreeDir, "status-provider"), { recursive: true });
+    writeFileSync(
+      join(worktreeDir, "status-provider", "config.json"),
+      JSON.stringify({
+        enabled: true,
+        tuiCompactStatus: {
+          enabled: true,
+          sessionPrompt: true,
+        },
+      }),
+      "utf8",
+    );
+
+    const sidebarData = {
+      entries: [{ name: "Copilot", percentRemaining: 50 }],
+      errors: [],
+      sessionTokens: undefined,
+    };
+
+    collectStatusRenderData.mockImplementation(async ({ config }) =>
+      config.onlyCurrentModel
+        ? { selection: { waitingForCurrentSelection: true }, data: null }
+        : { data: sidebarData },
+    );
+    buildSidebarStatusPanelLines.mockReturnValue(["Sidebar status"]);
+
+    const surfaces = await loadTuiSessionStatusSurfaces({
+      api: {
+        state: {
+          provider: [],
+          path: {
+            worktree: worktreeDir,
+            directory: nestedDir,
+          },
+          session: {
+            messages: () => [],
+          },
+        },
+        client: {},
+      } as any,
+      sessionID: "fresh-session-no-model",
+    });
+
+    expect(surfaces).toEqual({
+      sidebar: { status: "ready", lines: ["Sidebar status"] },
+      compact: { status: "loading" },
+    });
+    expect(buildCompactStatusStatusLine).not.toHaveBeenCalled();
   });
 
   it("uses compact fallback text when session collection has no data", async () => {

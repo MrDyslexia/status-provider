@@ -256,7 +256,7 @@ list — this covers the fields most people touch):
 | `onlyCurrentModel` | `boolean` | `false` | If `true`, only show status for the current model. |
 | `showSessionTokens` | `boolean` | `true` | Show the session input/output token section when data is available. |
 | `tuiSidebarPanel.enabled` | `boolean` | `true` | Sidebar panel visibility when the TUI plugin is installed. |
-| `tuiCompactStatus.enabled` | `boolean` | `false` | Opt-in compact status text for TUI prompt/home surfaces. |
+| `tuiCompactStatus.enabled` | `boolean` | `false` | Opt-in compact status text for TUI prompt/home surfaces. The session-prompt line always narrows to the current model's provider (with reset time) regardless of `onlyCurrentModel`; the home line still shows every provider. |
 | `anthropicBinaryPath` | `string` | `"claude"` | Path/command name for the local Claude CLI used by Anthropic probing. |
 | `pricingSnapshot.source` | `"auto" \| "bundled" \| "runtime"` | `"auto"` | Where pricing data comes from. |
 | `requestTimeoutMs` | `number` | `5000` | Timeout for remote provider API calls. |

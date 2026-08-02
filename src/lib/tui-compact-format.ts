@@ -3,7 +3,7 @@ import type { StatusProviderConfig } from "./types.js";
 import type { StatusProviderEntry, StatusProviderError } from "./entries.js";
 
 import { isValueEntry } from "./entries.js";
-import { formatDisplayedPercentLabel } from "./format-utils.js";
+import { formatDisplayedPercentLabel, formatResetCountdown } from "./format-utils.js";
 import { sanitizeStatusRenderData, sanitizeSingleLineDisplayText } from "./display-sanitize.js";
 import { extractSingleWindowWindowLabel } from "./status-entry-display.js";
 import { formatGroupedHeader } from "./grouped-header-format.js";
@@ -44,15 +44,20 @@ function formatCompactDisplayName(name: string): string {
 
 function formatCompactProviderLabel(name: string): string {
   const compactName = formatCompactDisplayName(name);
-  const withoutParentheticalPunctuation = compactName.replace(/\(([^)]*)\)/gu, (_match, inner: string) => {
-    const normalized = inner.trim();
-    if (!normalized) return "";
-    if (/^personal$/iu.test(normalized)) return "";
-    if (/^pro$/iu.test(normalized)) return " Pro";
-    return ` ${normalized}`;
-  });
+  const withoutParentheticalPunctuation = compactName.replace(
+    /\(([^)]*)\)/gu,
+    (_match, inner: string) => {
+      const normalized = inner.trim();
+      if (!normalized) return "";
+      if (/^personal$/iu.test(normalized)) return "";
+      if (/^pro$/iu.test(normalized)) return " Pro";
+      return ` ${normalized}`;
+    },
+  );
 
-  return compactText(withoutParentheticalPunctuation).replace(/\s{2,}/gu, " ").trim();
+  return compactText(withoutParentheticalPunctuation)
+    .replace(/\s{2,}/gu, " ")
+    .trim();
 }
 
 function formatWindowLabel(label: string): string {
@@ -85,21 +90,34 @@ function getWindowLabel(entry: StatusProviderEntry): string | null {
   return explicitLabel ? compactText(explicitLabel) : null;
 }
 
+function formatCompactResetLabel(resetTimeIso: string | undefined): string {
+  return formatResetCountdown(resetTimeIso, { compactRounded: true });
+}
+
 function formatCompactValueEntrySegment(
   entry: Extract<StatusProviderEntry, { kind: "value" }>,
 ): string | null {
   const name = getProviderName(entry);
-  const value = compactText(entry.value);
+  const resetLabel = formatCompactResetLabel(entry.resetTimeIso);
+  const value = resetLabel ? `${compactText(entry.value)} ${resetLabel}` : compactText(entry.value);
   const segment = [name, value].filter(Boolean).join(" - ");
   return segment || null;
 }
 
 type CompactPercentGroup = {
   provider: string;
-  windows: Array<{ label: string | null; percent: string }>;
+  windows: Array<{ label: string | null; percent: string; resetLabel: string }>;
 };
 
 type PendingCompactSegment = { kind: "percent"; key: string } | { kind: "value"; segment: string };
+
+function formatCompactWindow(
+  window: CompactPercentGroup["windows"][number],
+  includeLabel: boolean,
+): string {
+  const base = includeLabel && window.label ? `${window.label} ${window.percent}` : window.percent;
+  return window.resetLabel ? `${base} ${window.resetLabel}` : base;
+}
 
 function formatCompactPercentGroupSegment(group: CompactPercentGroup): string | null {
   const windows = group.windows;
@@ -107,10 +125,8 @@ function formatCompactPercentGroupSegment(group: CompactPercentGroup): string | 
 
   const summary =
     windows.length === 1
-      ? windows[0]!.percent
-      : windows
-          .map((window) => (window.label ? `${window.label} ${window.percent}` : window.percent))
-          .join(COMPACT_WINDOW_SEPARATOR);
+      ? formatCompactWindow(windows[0]!, false)
+      : windows.map((window) => formatCompactWindow(window, true)).join(COMPACT_WINDOW_SEPARATOR);
 
   return compactText(`${group.provider} ${summary}`);
 }
@@ -132,6 +148,8 @@ function formatCompactEntrySegments(params: {
     const provider = getProviderName(entry);
     const percent = formatCompactPercentLabel(entry.percentRemaining, params.percentDisplayMode);
     const label = getWindowLabel(entry);
+    const resetLabel =
+      entry.percentRemaining < 100 ? formatCompactResetLabel(entry.resetTimeIso) : "";
     const key = provider.toLowerCase();
     let group = groups.get(key);
 
@@ -141,7 +159,7 @@ function formatCompactEntrySegments(params: {
       pendingSegments.push({ kind: "percent", key });
     }
 
-    group.windows.push({ label, percent });
+    group.windows.push({ label, percent, resetLabel });
   }
 
   return pendingSegments
@@ -176,14 +194,13 @@ function formatCompactSessionTokensSegment(data: StatusRenderData): string | nul
   if (!hasTokenData) return null;
 
   const totalCached = sessionTokens.totalCachedInput ?? 0;
-  const inputSegment = totalCached > 0
-    ? `${formatCompactTokenCount(sessionTokens.totalInput)} (${formatCompactTokenCount(totalCached)})`
-    : formatCompactTokenCount(sessionTokens.totalInput);
+  const inputSegment =
+    totalCached > 0
+      ? `${formatCompactTokenCount(sessionTokens.totalInput)} (${formatCompactTokenCount(totalCached)})`
+      : formatCompactTokenCount(sessionTokens.totalInput);
 
   return compactText(
-    `tok ${inputSegment} in / ${formatCompactTokenCount(
-      sessionTokens.totalOutput,
-    )} out`,
+    `tok ${inputSegment} in / ${formatCompactTokenCount(sessionTokens.totalOutput)} out`,
   );
 }
 

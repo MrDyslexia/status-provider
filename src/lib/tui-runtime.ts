@@ -266,6 +266,22 @@ export async function resolveTuiCompactStatusRegistration(
   return (await resolveTuiSurfaceRegistration(api)).compact;
 }
 
+// The session compact surface (docked next to the prompt) is always narrower
+// than the sidebar, so it always filters down to the provider backing the
+// session's current model regardless of the global `onlyCurrentModel`
+// setting, which only governs the sidebar/toast surfaces.
+function shouldIncludeSessionMetaForSurfaces(config: StatusRuntimeContext["config"]): boolean {
+  return (
+    config.onlyCurrentModel ||
+    (config.tuiCompactStatus.enabled && config.tuiCompactStatus.sessionPrompt)
+  );
+}
+
+function buildCompactOnlyCurrentModelRuntime(runtime: StatusRuntimeContext): StatusRuntimeContext {
+  if (runtime.config.onlyCurrentModel) return runtime;
+  return { ...runtime, config: { ...runtime.config, onlyCurrentModel: true } };
+}
+
 export async function loadTuiSessionStatusSurfaces(params: {
   api: TuiPluginApi;
   sessionID: string;
@@ -276,7 +292,7 @@ export async function loadTuiSessionStatusSurfaces(params: {
     roots: getTuiRuntimeRootHints(params.api),
     sessionID: params.sessionID,
     resolveSessionMeta: (sessionID) => getTuiSessionModelMeta(params.api, sessionID),
-    includeSessionMeta: (config) => config.onlyCurrentModel,
+    includeSessionMeta: shouldIncludeSessionMetaForSurfaces,
   });
 
   const sidebarEnabled = isSessionSidebarEnabled(runtime);
@@ -286,20 +302,41 @@ export async function loadTuiSessionStatusSurfaces(params: {
     return buildDisabledSessionStatusSurfaces();
   }
 
-  const { result, formatStyle } = await collectTuiStatusRenderData({
-    runtime,
-    request: createStatusRuntimeRequestContext(runtime),
-  });
+  const compactRuntime = buildCompactOnlyCurrentModelRuntime(runtime);
+  const sharesSidebarCollection = compactRuntime === runtime;
+
+  const sidebarPromise = sidebarEnabled
+    ? collectTuiStatusRenderData({ runtime, request: createStatusRuntimeRequestContext(runtime) })
+    : undefined;
+
+  const compactPromise = !compactEnabled
+    ? undefined
+    : sharesSidebarCollection && sidebarPromise
+      ? sidebarPromise
+      : collectTuiStatusRenderData({
+          runtime: compactRuntime,
+          request: createStatusRuntimeRequestContext(compactRuntime),
+        });
+
+  const [sidebarCollected, compactCollected] = await Promise.all([sidebarPromise, compactPromise]);
 
   return {
-    sidebar: sidebarEnabled
-      ? buildSidebarPanelFromData({ runtime, result, formatStyle })
-      : { status: "disabled", lines: [] },
-    compact: buildCompactStatusFromData({
-      runtime,
-      result,
-      enabled: compactEnabled,
-    }),
+    sidebar:
+      sidebarEnabled && sidebarCollected
+        ? buildSidebarPanelFromData({
+            runtime,
+            result: sidebarCollected.result,
+            formatStyle: sidebarCollected.formatStyle,
+          })
+        : { status: "disabled", lines: [] },
+    compact:
+      compactEnabled && compactCollected
+        ? buildCompactStatusFromData({
+            runtime,
+            result: compactCollected.result,
+            enabled: true,
+          })
+        : { status: "disabled" },
   };
 }
 

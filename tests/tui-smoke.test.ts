@@ -3,17 +3,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const {
   cleanupFns,
   loadTuiHomeCompactStatus,
+  loadTuiManualToast,
+  loadTuiProviderInfoReport,
   loadTuiSessionStatusSurfaces,
   resolveTuiSurfaceRegistration,
 } = vi.hoisted(() => ({
   cleanupFns: [] as Array<() => void>,
   loadTuiHomeCompactStatus: vi.fn(),
+  loadTuiManualToast: vi.fn(),
+  loadTuiProviderInfoReport: vi.fn(),
   loadTuiSessionStatusSurfaces: vi.fn(),
   resolveTuiSurfaceRegistration: vi.fn(),
 }));
 
 vi.mock("../src/lib/tui-runtime.js", () => ({
   loadTuiHomeCompactStatus,
+  loadTuiManualToast,
+  loadTuiProviderInfoReport,
   loadTuiSessionStatusSurfaces,
   resolveTuiSurfaceRegistration,
 }));
@@ -26,7 +32,7 @@ vi.mock("solid-js", () => ({
       : props.children;
   },
   createEffect: (fn: () => void) => fn(),
-  createSignal: <T,>(initial: T) => {
+  createSignal: <T>(initial: T) => {
     let value = initial;
     return [
       () => value,
@@ -49,20 +55,33 @@ vi.mock("@opentui/solid/jsx-runtime", () => ({
     typeof type === "function" ? type(props) : { type, props },
 }));
 
-function createElement(type: unknown, props: Record<string, unknown> | null, ...children: unknown[]) {
+function createElement(
+  type: unknown,
+  props: Record<string, unknown> | null,
+  ...children: unknown[]
+) {
   const nextProps = {
     ...(props ?? {}),
-    ...(children.length === 0
-      ? {}
-      : { children: children.length === 1 ? children[0] : children }),
+    ...(children.length === 0 ? {} : { children: children.length === 1 ? children[0] : children }),
   };
   return typeof type === "function" ? type(nextProps) : { type, props: nextProps };
 }
 
 function createApi() {
-  const registered: Array<{ order?: number; slots: Record<string, (ctx: unknown, props: any) => unknown> }> = [];
+  const registered: Array<{
+    order?: number;
+    slots: Record<string, (ctx: unknown, props: any) => unknown>;
+  }> = [];
   const unsubscribers: Array<() => void> = [];
+  const commands: Array<any> = [];
   const api = {
+    route: { current: { name: "session", params: { sessionID: "session-1" } } },
+    command: {
+      register: vi.fn((factory: () => any[]) => {
+        commands.push(...factory());
+        return vi.fn();
+      }),
+    },
     state: {
       provider: [],
       path: {
@@ -81,6 +100,7 @@ function createApi() {
     },
     ui: {
       Prompt: vi.fn((props: Record<string, unknown>) => ({ type: "Prompt", props })),
+      toast: vi.fn(),
     },
     event: {
       on: vi.fn(() => {
@@ -90,18 +110,27 @@ function createApi() {
       }),
     },
     slots: {
-      register: vi.fn((plugin: { order?: number; slots: Record<string, (ctx: unknown, props: any) => unknown> }) => {
-        registered.push(plugin);
-        return `slot-${registered.length}`;
-      }),
+      register: vi.fn(
+        (plugin: {
+          order?: number;
+          slots: Record<string, (ctx: unknown, props: any) => unknown>;
+        }) => {
+          registered.push(plugin);
+          return `slot-${registered.length}`;
+        },
+      ),
     },
     lifecycle: {
       onDispose: vi.fn(),
     },
-    client: {},
+    client: {
+      session: {
+        prompt: vi.fn().mockResolvedValue({}),
+      },
+    },
   };
 
-  return { api, registered, unsubscribers };
+  return { api, commands, registered, unsubscribers };
 }
 
 async function loadTuiModule() {
@@ -116,6 +145,10 @@ describe("tui plugin smoke", () => {
     cleanupFns.length = 0;
     loadTuiHomeCompactStatus.mockReset();
     loadTuiHomeCompactStatus.mockResolvedValue({ status: "ready", text: "Home status" });
+    loadTuiManualToast.mockReset();
+    loadTuiManualToast.mockResolvedValue({ message: "Provider status", duration: 5000 });
+    loadTuiProviderInfoReport.mockReset();
+    loadTuiProviderInfoReport.mockResolvedValue("Provider diagnostics");
     loadTuiSessionStatusSurfaces.mockReset();
     loadTuiSessionStatusSurfaces.mockResolvedValue({
       sidebar: { status: "ready", lines: ["Sidebar status"] },
@@ -168,7 +201,10 @@ describe("tui plugin smoke", () => {
 
     expect(compactOnly.registered).toHaveLength(1);
     expect(compactOnly.registered[0].order).toBe(90);
-    expect(Object.keys(compactOnly.registered[0].slots)).toEqual(["session_prompt_right", "home_bottom"]);
+    expect(Object.keys(compactOnly.registered[0].slots)).toEqual([
+      "session_prompt_right",
+      "home_bottom",
+    ]);
 
     const enabled = createApi();
     resolveTuiSurfaceRegistration.mockResolvedValueOnce({
@@ -188,7 +224,50 @@ describe("tui plugin smoke", () => {
     expect(enabled.registered[0].order).toBe(150);
     expect(Object.keys(enabled.registered[0].slots)).toEqual(["sidebar_content"]);
     expect(enabled.registered[1].order).toBe(90);
-    expect(Object.keys(enabled.registered[1].slots)).toEqual(["session_prompt_right", "home_bottom"]);
+    expect(Object.keys(enabled.registered[1].slots)).toEqual([
+      "session_prompt_right",
+      "home_bottom",
+    ]);
+  });
+
+  it("handles toast and info slash commands without submitting a command prompt", async () => {
+    const plugin = await loadTuiModule();
+    const { api, commands } = createApi();
+    resolveTuiSurfaceRegistration.mockResolvedValueOnce({
+      sidebar: { enabled: false },
+      compact: {
+        enabled: false,
+        homeBottom: false,
+        sessionPrompt: false,
+        hasNativeProviderStatus: false,
+        suppressedByNativeProviderStatus: false,
+      },
+    });
+
+    await plugin.tui(api as any, undefined, {} as any);
+
+    const toastCommand = commands.find(
+      (command) => command.slash?.name === "status-provider-toast",
+    );
+    const infoCommand = commands.find((command) => command.slash?.name === "status-provider-info");
+    expect(toastCommand).toBeDefined();
+    expect(infoCommand).toBeDefined();
+
+    await toastCommand.onSelect();
+    expect(loadTuiManualToast).toHaveBeenCalledWith({ api, sessionID: "session-1" });
+    expect(api.ui.toast).toHaveBeenCalledWith({
+      variant: "info",
+      message: "Provider status",
+      duration: 5000,
+    });
+
+    await infoCommand.onSelect();
+    expect(loadTuiProviderInfoReport).toHaveBeenCalledWith({ api, sessionID: "session-1" });
+    expect(api.client.session.prompt).toHaveBeenCalledWith({
+      sessionID: "session-1",
+      noReply: true,
+      parts: [{ type: "text", text: "Provider diagnostics", ignored: true }],
+    });
   });
 
   it("falls back to sidebar-only registration when surface resolution fails", async () => {
@@ -300,9 +379,12 @@ describe("tui plugin smoke", () => {
     const compactRegistration = registered.find((registration) => registration.order === 90);
     expect(compactRegistration).toBeDefined();
 
-    const rendered = compactRegistration!.slots.session_prompt_right({}, {
-      session_id: "session-1",
-    }) as any;
+    const rendered = compactRegistration!.slots.session_prompt_right(
+      {},
+      {
+        session_id: "session-1",
+      },
+    ) as any;
 
     expect(rendered).toMatchObject({
       type: "box",

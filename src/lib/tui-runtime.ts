@@ -4,16 +4,27 @@ import type { CompactStatusState, SidebarPanelState } from "./tui-panel-state.js
 import type { CollectStatusRenderDataResult, SessionModelMeta } from "./status-render-data.js";
 import type { StatusRuntimeContext } from "./status-runtime-context.js";
 
+import { resolveRuntimeContextRoots, type RuntimeContextRootHints } from "./config-file-utils.js";
 import {
-  resolveRuntimeContextRoots,
-  type RuntimeContextRootHints,
-} from "./config-file-utils.js";
-import { createStatusRuntimeRequestContext, resolveStatusRuntimeContext } from "./status-runtime-context.js";
-import { collectStatusRenderData } from "./status-render-data.js";
-import { resolveStatusFormatStyle } from "./status-format-style.js";
+  createStatusProviderRuntimeContext,
+  createStatusRuntimeRequestContext,
+  resolveStatusRuntimeContext,
+} from "./status-runtime-context.js";
+import {
+  collectStatusRenderData,
+  collectStatusStatusLiveProbes,
+  matchesStatusProviderCurrentSelection,
+} from "./status-render-data.js";
+import {
+  resolveStatusFormatStyle,
+  SINGLE_WINDOW_PER_PROVIDER_FORMAT_STYLE,
+} from "./status-format-style.js";
 import { buildCompactStatusStatusLine } from "./tui-compact-format.js";
 import { hasNativeProviderStatusClient } from "./tui-native-provider-status.js";
 import { buildSidebarStatusPanelLines } from "./tui-sidebar-format.js";
+import { formatStatusRows } from "./format.js";
+import { inspectTuiConfig } from "./tui-config-diagnostics.js";
+import { buildStatusStatusReport } from "./status-status.js";
 
 const COMPACT_UNAVAILABLE_TEXT = "Status unavailable";
 
@@ -57,10 +68,7 @@ function createTuiStatusClient(api: TuiPluginApi) {
           if (api.client.config?.get) {
             const response = await api.client.config.get();
             return {
-              data:
-                response?.data && typeof response.data === "object"
-                  ? response.data
-                  : {},
+              data: response?.data && typeof response.data === "object" ? response.data : {},
             };
           }
         } catch {
@@ -127,6 +135,11 @@ export type TuiSurfaceRegistration = {
 export type TuiSessionStatusSurfaces = {
   sidebar: SidebarPanelState;
   compact: CompactStatusState;
+};
+
+export type TuiManualToast = {
+  message: string;
+  duration: number;
 };
 
 function isSessionSidebarEnabled(runtime: StatusRuntimeContext): boolean {
@@ -326,6 +339,134 @@ export async function loadTuiHomeCompactStatus(params: {
     runtime: homeRuntime,
     result,
     enabled: true,
+  });
+}
+
+export async function loadTuiManualToast(params: {
+  api: TuiPluginApi;
+  sessionID: string;
+}): Promise<TuiManualToast | null> {
+  const statusClient = createTuiStatusClient(params.api);
+  const runtime = await resolveStatusRuntimeContext({
+    client: statusClient,
+    roots: getTuiRuntimeRootHints(params.api),
+    sessionID: params.sessionID,
+    resolveSessionMeta: (sessionID) => getTuiSessionModelMeta(params.api, sessionID),
+    includeSessionMeta: (config) => config.onlyCurrentModel,
+  });
+  if (!runtime.config.enabled) return null;
+
+  const result = await collectStatusRenderData({
+    client: runtime.client,
+    config: runtime.config,
+    configMeta: runtime.configMeta,
+    request: createStatusRuntimeRequestContext(runtime),
+    surfaceExplicitProviderIssues: true,
+    formatStyle: resolveStatusFormatStyle(runtime.config.formatStyle),
+    bypassProviderCache: true,
+    providers: runtime.providers,
+  });
+  if (!result.data) return null;
+
+  const message = formatStatusRows({
+    version: "1.0.0",
+    layout: runtime.config.layout,
+    entries: result.data.entries,
+    errors: result.data.errors,
+    style: resolveStatusFormatStyle(runtime.config.formatStyle),
+    percentDisplayMode: runtime.config.percentDisplayMode,
+    sessionTokens: result.data.sessionTokens,
+    textVariant: runtime.config.toastTextVariant,
+    providerNameVariant: runtime.config.toastProviderNameVariant,
+    percentVariant: runtime.config.toastPercentVariant,
+    colorVariant: runtime.config.toastColorVariant,
+    alignmentVariant: runtime.config.toastAlignmentVariant,
+  });
+
+  return message.trim() ? { message, duration: runtime.config.toastDurationMs } : null;
+}
+
+export async function loadTuiProviderInfoReport(params: {
+  api: TuiPluginApi;
+  sessionID: string;
+}): Promise<string | null> {
+  const statusClient = createTuiStatusClient(params.api);
+  const runtime = await resolveStatusRuntimeContext({
+    client: statusClient,
+    roots: getTuiRuntimeRootHints(params.api),
+    sessionID: params.sessionID,
+    resolveSessionMeta: (sessionID) => getTuiSessionModelMeta(params.api, sessionID),
+    includeSessionMeta: true,
+  });
+  if (!runtime.config.enabled) return null;
+
+  const currentModel = runtime.session.sessionMeta?.modelID;
+  const currentProviderID = runtime.session.sessionMeta?.providerID;
+  const providerContext = createStatusProviderRuntimeContext(runtime);
+  const isAutoMode = runtime.config.enabledProviders === "auto";
+  const availability = await Promise.all(
+    runtime.providers.map(async (provider) => {
+      let available = false;
+      try {
+        available = await provider.isAvailable(providerContext);
+      } catch {
+        available = false;
+      }
+      return {
+        id: provider.id,
+        enabled: isAutoMode ? available : runtime.config.enabledProviders.includes(provider.id),
+        available,
+        matchesCurrentModel:
+          currentModel || currentProviderID
+            ? matchesStatusProviderCurrentSelection({
+                provider,
+                currentModel,
+                currentProviderID,
+                enabledProviders: runtime.config.enabledProviders,
+              })
+            : undefined,
+      };
+    }),
+  );
+  const availabilityById = new Map(availability.map((item) => [item.id, item] as const));
+  const liveProviders = runtime.providers.filter((provider) => {
+    const item = availabilityById.get(provider.id);
+    return item?.enabled && item.available;
+  });
+  const providerLiveProbes = await collectStatusStatusLiveProbes({
+    client: runtime.client,
+    config: runtime.config,
+    configMeta: runtime.configMeta,
+    request: createStatusRuntimeRequestContext(runtime),
+    formatStyle: SINGLE_WINDOW_PER_PROVIDER_FORMAT_STYLE,
+    providers: liveProviders,
+  });
+  const tuiDiagnostics = await inspectTuiConfig({ roots: runtime.roots });
+
+  return await buildStatusStatusReport({
+    tuiDiagnostics,
+    configSource: runtime.configMeta.source,
+    configPaths: runtime.configMeta.paths,
+    globalConfigPaths: runtime.configMeta.globalConfigPaths,
+    workspaceConfigPaths: runtime.configMeta.workspaceConfigPaths,
+    settingSources: runtime.configMeta.settingSources,
+    configIssues: runtime.configMeta.configIssues,
+    enabledProviders: runtime.config.enabledProviders,
+    anthropicBinaryPath: runtime.config.anthropicBinaryPath,
+    alibabaCodingPlanTier: runtime.config.alibabaCodingPlanTier,
+    cursorPlan: runtime.config.cursorPlan,
+    cursorIncludedApiUsd: runtime.config.cursorIncludedApiUsd,
+    cursorBillingCycleStartDay: runtime.config.cursorBillingCycleStartDay,
+    opencodeGoWindows: runtime.config.opencodeGoWindows,
+    pricingSnapshotSource: runtime.config.pricingSnapshot.source,
+    onlyCurrentModel: runtime.config.onlyCurrentModel,
+    currentModel,
+    sessionModelLookup: currentModel ? "ok" : "not_found",
+    providerAvailability: availability,
+    providerLiveProbes,
+    googleRefresh: { attempted: false },
+    geminiCliClient: statusClient,
+    generatedAtMs: Date.now(),
   });
 }
 

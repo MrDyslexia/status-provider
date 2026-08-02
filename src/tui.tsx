@@ -19,6 +19,8 @@ import {
 import { getSidebarBodyLineColor } from "./lib/tui-line-style.js";
 import {
   loadTuiHomeCompactStatus,
+  loadTuiManualToast,
+  loadTuiProviderInfoReport,
   loadTuiSessionStatusSurfaces,
   resolveTuiSurfaceRegistration,
 } from "./lib/tui-runtime.js";
@@ -287,7 +289,10 @@ function acquireHomeCompactResource(api: TuiPluginApi): HomeCompactResource {
   return next;
 }
 
-function useSessionStatusResource(api: TuiPluginApi, sessionID: () => string): () => SessionStatusResource {
+function useSessionStatusResource(
+  api: TuiPluginApi,
+  sessionID: () => string,
+): () => SessionStatusResource {
   let current = acquireSessionStatusResource(api, sessionID());
   const [resource, setResource] = createSignal(current);
 
@@ -308,10 +313,7 @@ function useSessionStatusResource(api: TuiPluginApi, sessionID: () => string): (
   return resource;
 }
 
-function SidebarContentView(props: {
-  api: TuiPluginApi;
-  sessionID: string;
-}) {
+function SidebarContentView(props: { api: TuiPluginApi; sessionID: string }) {
   const resource = useSessionStatusResource(props.api, () => props.sessionID);
   const panel = () => resource().sidebar();
 
@@ -409,7 +411,101 @@ function registerSidebarSlots(api: TuiPluginApi): void {
   });
 }
 
+function getActiveSessionID(api: TuiPluginApi): string | undefined {
+  const route = api.route.current;
+  const sessionID = route.name === "session" ? route.params?.sessionID : undefined;
+  return typeof sessionID === "string" ? sessionID : undefined;
+}
+
+async function showTuiToast(
+  api: TuiPluginApi,
+  input: {
+    variant?: "info" | "success" | "warning" | "error";
+    message: string;
+    duration?: number;
+  },
+): Promise<void> {
+  api.ui.toast(input);
+}
+
+function registerDirectCommands(api: TuiPluginApi): void {
+  if (!api.command) return;
+
+  const unregister = api.command.register(() => [
+    {
+      title: "Show provider status toast",
+      value: "status-provider.toast",
+      description: "Force-refresh and show provider status without starting a chat.",
+      category: "Status Provider",
+      slash: { name: "status-provider-toast" },
+      onSelect: async () => {
+        try {
+          const sessionID = getActiveSessionID(api);
+          if (!sessionID) {
+            await showTuiToast(api, {
+              variant: "warning",
+              message: "Open a session before showing provider status.",
+            });
+            return;
+          }
+          const toast = await loadTuiManualToast({ api, sessionID });
+          await showTuiToast(
+            api,
+            toast
+              ? { variant: "info", message: toast.message, duration: toast.duration }
+              : { variant: "warning", message: "Status unavailable" },
+          );
+        } catch (error) {
+          await showTuiToast(api, {
+            variant: "error",
+            message: `Failed to load provider status: ${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
+      },
+    },
+    {
+      title: "Show status provider diagnostics",
+      value: "status-provider.info",
+      description: "Inject diagnostics without starting a chat.",
+      category: "Status Provider",
+      slash: { name: "status-provider-info" },
+      onSelect: async () => {
+        try {
+          const sessionID = getActiveSessionID(api);
+          if (!sessionID) {
+            await showTuiToast(api, {
+              variant: "warning",
+              message: "Open a session before showing diagnostics.",
+            });
+            return;
+          }
+          const report = await loadTuiProviderInfoReport({ api, sessionID });
+          if (!report) {
+            await showTuiToast(api, {
+              variant: "warning",
+              message: "Status Provider is disabled.",
+            });
+            return;
+          }
+          await api.client.session?.prompt?.({
+            sessionID,
+            noReply: true,
+            parts: [{ type: "text", text: report, ignored: true }],
+          });
+        } catch (error) {
+          await showTuiToast(api, {
+            variant: "error",
+            message: `Failed to load diagnostics: ${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
+      },
+    },
+  ]);
+  api.lifecycle.onDispose(unregister);
+}
+
 const tui: TuiPlugin = async (api) => {
+  registerDirectCommands(api);
   let surfaceRegistration;
   try {
     surfaceRegistration = await resolveTuiSurfaceRegistration(api);

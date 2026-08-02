@@ -96,7 +96,7 @@ describe("/status-provider-toast command behavior", () => {
     await rm(TEST_RUNTIME_ROOT, { recursive: true, force: true });
   });
 
-  it("registers /status-provider-toast in plugin config", async () => {
+  it("leaves /status-provider-toast to the direct TUI command", async () => {
     mocks.loadConfig.mockResolvedValueOnce({ ...DEFAULT_CONFIG, enabled: true });
 
     const { StatusProviderPlugin } = await import("../src/plugin.js");
@@ -106,10 +106,7 @@ describe("/status-provider-toast command behavior", () => {
     const cfg: { command?: Record<string, { template: string; description: string }> } = {};
     await hooks.config?.(cfg);
 
-    expect(cfg.command?.["status-provider-toast"]).toEqual({
-      template: "/status-provider-toast",
-      description: "Force-show the actual popup toast right now (bypasses cache/interval).",
-    });
+    expect(cfg.command?.["status-provider-toast"]).toBeUndefined();
   });
 
   it("forces the popup toast immediately, bypassing cache/interval, without injecting chat text", async () => {

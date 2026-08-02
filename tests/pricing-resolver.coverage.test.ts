@@ -1,11 +1,13 @@
 import { readFileSync } from "node:fs";
 
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 import {
   listModelsForProvider,
   listProviders,
   lookupCost,
+  __resetPricingSnapshotForTests,
+  setPricingSnapshotSelection,
 } from "../src/lib/modelsdev-pricing.js";
 import {
   CURSOR_OFFICIAL_MODEL_ALIASES,
@@ -54,6 +56,11 @@ function getCursorUpstreamFallbackModelIds(): string[] {
 }
 
 describe("resolvePricingKey snapshot coverage", () => {
+  beforeEach(() => {
+    __resetPricingSnapshotForTests();
+    setPricingSnapshotSelection("bundled");
+  });
+
   it("resolves every models.dev provider/model pair when source ids are official", () => {
     const failures: string[] = [];
     const providers = listProviders();
@@ -325,7 +332,9 @@ describe("resolvePricingKey snapshot coverage", () => {
       }
 
       if (!lookupCost(resolved.key.provider, resolved.key.model)) {
-        failures.push(`${alias} -> missing priced snapshot key ${resolved.key.provider}/${resolved.key.model}`);
+        failures.push(
+          `${alias} -> missing priced snapshot key ${resolved.key.provider}/${resolved.key.model}`,
+        );
       }
     }
 
@@ -394,7 +403,9 @@ describe("resolvePricingKey snapshot coverage", () => {
       }
 
       if (resolvedPricing.method !== "cursor_api_alias") {
-        failures.push(`${modelID} -> unexpected resolvePricingKey() method ${resolvedPricing.method}`);
+        failures.push(
+          `${modelID} -> unexpected resolvePricingKey() method ${resolvedPricing.method}`,
+        );
         continue;
       }
 

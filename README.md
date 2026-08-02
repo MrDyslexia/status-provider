@@ -102,10 +102,35 @@ up) instead of your host OpenCode install:
 bun /plugin/status-provider/dist/bin/status-provider.js config
 ```
 
+## Updating
+
+OpenCode caches npm plugins, so restarting with a bare `status-provider` spec
+does not reliably fetch a newer registry version. Use the updater to replace
+configured server and TUI plugin entries with an exact npm version:
+
+```bash
+npx status-provider@latest update
+```
+
+By default, the command checks both the current project/worktree and the global
+OpenCode config. Restrict it to one scope when needed:
+
+```bash
+npx status-provider@latest update --project
+npx status-provider@latest update --global
+npx status-provider@latest update --dry-run
+```
+
+The updater preserves tuple options and JSONC comments, skips local `file://`
+development plugins, and asks you to restart OpenCode after changing config.
+If you keep the CLI installed globally with Bun, update that executable
+separately with `bun add -g status-provider@latest`.
+
 ## Quick start
 
 ```bash
 status-provider init
+status-provider update
 status-provider show
 status-provider config
 ```
@@ -420,6 +445,7 @@ Notes on the transcript above:
 ```bash
 status-provider --help
 status-provider init
+status-provider update [--global|--project] [--dry-run]
 status-provider show [--provider <provider-id>]
 status-provider config [--dry-run]
 ```
@@ -427,6 +453,7 @@ status-provider config [--dry-run]
 | Command | Flags | What it does |
 |---|---|---|
 | `init` | — | Runs the interactive `status-provider` installer. |
+| `update` | `--global` (`-g`), `--project` (`-p`), `--dry-run` (`-n`) | Pins configured OpenCode server/TUI plugin entries to the latest exact npm version. By default, checks project and global scopes. |
 | `show` | `--provider <provider-id>` | Prints a quick status glance; optionally scoped to a single provider. |
 | `config` | `--dry-run` (`-n`) | Interactive config editor for enabled providers, ordering, and display variants. `--dry-run` previews the wizard and its resulting diff without saving. |
 | `--help` / `-h` / `help` | — | Prints CLI usage. |

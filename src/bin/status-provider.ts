@@ -11,6 +11,7 @@ const USAGE = [
   "  npx status-provider init",
   "  npx status-provider show [--provider <provider-id>]",
   "  npx status-provider config [--dry-run]",
+  "  npx status-provider update [--global|--project] [--dry-run]",
   "  npx status-provider --help",
   "",
   "Commands:",
@@ -18,6 +19,7 @@ const USAGE = [
   "  show    Print a quick status glance",
   "  config  Interactive config editor for enabled providers and display order",
   "          --dry-run preview changes without saving",
+  "  update  Pin configured OpenCode plugin entries to the latest npm version",
 ].join("\n");
 
 function printUsage(): void {
@@ -73,6 +75,11 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   if (command === "config") {
     const { runCliConfigCommand } = await import("../lib/cli-config.js");
     return await runCliConfigCommand({ argv: rest });
+  }
+
+  if (command === "update") {
+    const { runCliUpdateCommand } = await import("../lib/cli-update.js");
+    return await runCliUpdateCommand({ argv: rest });
   }
 
   printUsage();

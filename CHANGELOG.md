@@ -5,9 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-08-02
+
+### Added
+
+- Added `status-provider update` to pin configured OpenCode server and TUI
+  plugin entries to the latest exact npm version, bypassing stale plugin cache
+  entries while preserving tuple options and JSONC comments.
+
+### Fixed
+
+- Compact session status now matches OpenCode's active provider for unqualified
+  model IDs and renders only current-provider quota/reset data.
+- OpenAI quota windows are classified by their actual duration instead of
+  positional API fields.
+
 ## [0.1.0] - Initial release
 
 ### Added
+
 - OpenCode plugin and CLI (`status-provider`) for provider usage status, quota windows, and runtime diagnostics.
 - Sidebar and TUI panels with configurable display previews across AI providers.
 - Interactive config wizard (`status-provider config`) for enabling/ordering providers, format style, percent mode, toast settings, and color/alignment variants.
@@ -15,8 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Provider status resolution for Anthropic, GitHub Copilot, Google, OpenAI, MiniMax, Kimi, and Ollama Cloud.
 
 ### Fixed
+
 - Prioritize OpenCode `auth.json` over Claude CLI status for the Anthropic provider.
 - Stabilized OpenCode validation and sidebar status layout.
 - Cleaned up status-provider identity and plugin command registration.
 
+[0.2.0]: https://github.com/MrDyslexia/status-provider/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/MrDyslexia/status-provider/releases/tag/v0.1.0

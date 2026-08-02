@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const commandMocks = vi.hoisted(() => ({
   runInitInstaller: vi.fn(),
   runCliShowCommand: vi.fn(),
+  runCliUpdateCommand: vi.fn(),
 }));
 
 vi.mock("../src/lib/init-installer.js", () => ({
@@ -18,11 +19,16 @@ vi.mock("../src/lib/cli-show.js", () => ({
   runCliShowCommand: commandMocks.runCliShowCommand,
 }));
 
+vi.mock("../src/lib/cli-update.js", () => ({
+  runCliUpdateCommand: commandMocks.runCliUpdateCommand,
+}));
+
 describe("status-provider bin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     commandMocks.runInitInstaller.mockResolvedValue(0);
     commandMocks.runCliShowCommand.mockResolvedValue(0);
+    commandMocks.runCliUpdateCommand.mockResolvedValue(0);
   });
 
   it("dispatches init to the interactive installer", async () => {
@@ -66,6 +72,17 @@ describe("status-provider bin", () => {
     });
   });
 
+  it("dispatches update args to the update command", async () => {
+    const { main } = await import("../src/bin/status-provider.js");
+
+    const code = await main(["update", "--global", "--dry-run"]);
+
+    expect(code).toBe(0);
+    expect(commandMocks.runCliUpdateCommand).toHaveBeenCalledWith({
+      argv: ["--global", "--dry-run"],
+    });
+  });
+
   it("prints help and exits zero for --help", async () => {
     const { main } = await import("../src/bin/status-provider.js");
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -105,9 +122,7 @@ describe("status-provider bin", () => {
   it("treats symlinked bin paths as direct CLI execution", async () => {
     const { cliShouldRunMain } = await import("../src/bin/status-provider.js");
 
-    const modulePath = fileURLToPath(
-      new URL("../src/bin/status-provider.ts", import.meta.url),
-    );
+    const modulePath = fileURLToPath(new URL("../src/bin/status-provider.ts", import.meta.url));
     const tempDir = mkdtempSync(join(tmpdir(), "status-provider-bin-"));
     const symlinkPath = join(tempDir, "status-provider");
 

@@ -188,7 +188,7 @@ export function extractProviderIdsFromParsedConfig(parsed: unknown): string[] {
 export function isStatusPluginSpec(spec: string, kind: ConfigFileKind): boolean {
   const normalized = spec.replace(/\\/g, "/").toLowerCase();
 
-  if (normalized === "status-provider" || normalized === "@mrdyslexia/status-provider") {
+  if (isStatusNpmPluginSpec(normalized)) {
     return true;
   }
 
@@ -196,4 +196,14 @@ export function isStatusPluginSpec(spec: string, kind: ConfigFileKind): boolean 
   const isTuiEntrypoint = normalized.includes("status-provider/dist/tui.tsx");
 
   return kind === "tui" ? isTuiEntrypoint : isServerEntrypoint;
+}
+
+export function isStatusNpmPluginSpec(spec: string): boolean {
+  const normalized = spec.trim().toLowerCase();
+  return (
+    normalized === "status-provider" ||
+    normalized.startsWith("status-provider@") ||
+    normalized === "@mrdyslexia/status-provider" ||
+    normalized.startsWith("@mrdyslexia/status-provider@")
+  );
 }

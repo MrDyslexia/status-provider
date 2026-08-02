@@ -1,7 +1,22 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { join } from "node:path";
 
-import { getEffectiveConfigRoot, resolveRuntimeContextRoots } from "../src/lib/config-file-utils.js";
+import {
+  getEffectiveConfigRoot,
+  isStatusNpmPluginSpec,
+  isStatusPluginSpec,
+  resolveRuntimeContextRoots,
+} from "../src/lib/config-file-utils.js";
+
+describe("status-provider plugin specs", () => {
+  it("recognizes bare and versioned npm specs", () => {
+    expect(isStatusNpmPluginSpec("status-provider")).toBe(true);
+    expect(isStatusNpmPluginSpec("status-provider@0.2.0")).toBe(true);
+    expect(isStatusNpmPluginSpec("@mrdyslexia/status-provider@latest")).toBe(true);
+    expect(isStatusPluginSpec("status-provider@0.2.0", "opencode")).toBe(true);
+    expect(isStatusNpmPluginSpec("status-provider-extra")).toBe(false);
+  });
+});
 
 describe("getEffectiveConfigRoot", () => {
   const original = process.env.OPENCODE_CONFIG_DIR;
@@ -26,7 +41,9 @@ describe("getEffectiveConfigRoot", () => {
 
   it("resolves relative OPENCODE_CONFIG_DIR from fallback", () => {
     process.env.OPENCODE_CONFIG_DIR = ".opencode";
-    expect(getEffectiveConfigRoot("/home/user/project")).toBe(join("/home/user/project", ".opencode"));
+    expect(getEffectiveConfigRoot("/home/user/project")).toBe(
+      join("/home/user/project", ".opencode"),
+    );
   });
 
   it("ignores whitespace-only OPENCODE_CONFIG_DIR", () => {

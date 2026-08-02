@@ -1,6 +1,6 @@
 {
   "name": "status-provider",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "packageManager": "bun@1.3.4",
   "description": "OpenCode plugin and CLI for provider usage status, quota windows, runtime diagnostics, sidebar/TUI panels, and configurable display previews across AI providers.",
   "type": "module",

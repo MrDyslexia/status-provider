@@ -273,6 +273,9 @@ describe("tui runtime helpers", () => {
             directory: nestedDir,
           },
           session: {
+            get: vi.fn().mockReturnValue({
+              model: { id: "gpt-4.1", providerID: "copilot" },
+            }),
             messages: () => [],
           },
         },
@@ -288,14 +291,6 @@ describe("tui runtime helpers", () => {
                     onlyCurrentModel: true,
                   },
                 },
-              },
-            }),
-          },
-          session: {
-            get: vi.fn().mockResolvedValue({
-              data: {
-                providerID: "copilot",
-                modelID: "gpt-4.1",
               },
             }),
           },
@@ -600,18 +595,35 @@ describe("tui runtime helpers", () => {
     expect(runtimeProviders).toHaveBeenCalledOnce();
   });
 
-  it("falls back to session messages when session.get fails under onlyCurrentModel", async () => {
-    const sessionGet = vi.fn().mockRejectedValue(new Error("boom"));
+  it("reads the current model synchronously from state.session.get", async () => {
+    const sessionGet = vi.fn().mockReturnValue({
+      model: { id: "gpt-5.5-fast", providerID: "openai" },
+    });
 
     const meta = await getTuiSessionModelMeta(
       {
-        client: {
-          session: {
-            get: sessionGet,
-          },
-        },
         state: {
           session: {
+            get: sessionGet,
+            messages: () => [],
+          },
+        },
+      } as any,
+      "session-4",
+    );
+
+    expect(sessionGet).toHaveBeenCalledWith("session-4");
+    expect(meta).toEqual({ providerID: "openai", modelID: "gpt-5.5-fast" });
+  });
+
+  it("falls back to session messages when state.session.get has no model yet", async () => {
+    const sessionGet = vi.fn().mockReturnValue(undefined);
+
+    const meta = await getTuiSessionModelMeta(
+      {
+        state: {
+          session: {
+            get: sessionGet,
             messages: () => [
               { providerID: "openai", modelID: "gpt-4.1" },
               { model: { providerID: "cursor", modelID: "claude-3.7-sonnet" } },
@@ -622,7 +634,7 @@ describe("tui runtime helpers", () => {
       "session-3",
     );
 
-    expect(sessionGet).toHaveBeenCalledWith({ path: { id: "session-3" } });
+    expect(sessionGet).toHaveBeenCalledWith("session-3");
     expect(meta).toEqual({
       providerID: "cursor",
       modelID: "claude-3.7-sonnet",
@@ -871,19 +883,13 @@ describe("tui runtime helpers", () => {
             directory: nestedDir,
           },
           session: {
+            get: vi.fn().mockReturnValue({
+              model: { id: "gpt-4.1", providerID: "copilot" },
+            }),
             messages: () => [],
           },
         },
-        client: {
-          session: {
-            get: vi.fn().mockResolvedValue({
-              data: {
-                providerID: "copilot",
-                modelID: "gpt-4.1",
-              },
-            }),
-          },
-        },
+        client: {},
       } as any,
       sessionID: "compact-session",
     });
@@ -973,16 +979,13 @@ describe("tui runtime helpers", () => {
             directory: nestedDir,
           },
           session: {
+            get: vi.fn().mockReturnValue({
+              model: { id: "claude-sonnet-5", providerID: "anthropic" },
+            }),
             messages: () => [],
           },
         },
-        client: {
-          session: {
-            get: vi.fn().mockResolvedValue({
-              data: { providerID: "anthropic", modelID: "claude-sonnet-5" },
-            }),
-          },
-        },
+        client: {},
       } as any,
       sessionID: "independent-filtering",
     });
@@ -1141,11 +1144,7 @@ describe("tui runtime helpers", () => {
             messages: () => [],
           },
         },
-        client: {
-          session: {
-            get: vi.fn().mockResolvedValue({ data: {} }),
-          },
-        },
+        client: {},
       } as any,
       sessionID: "waiting-session",
     });

@@ -105,6 +105,12 @@ declare module "@opencode-ai/plugin/tui" {
       };
       session: {
         messages: (sessionID: string) => ReadonlyArray<any>;
+        get?: (sessionID: string) =>
+          | {
+              model?: { id?: string; providerID?: string; variant?: string };
+              agent?: string;
+            }
+          | undefined;
       };
     };
     theme: {
@@ -148,10 +154,14 @@ declare module "@opencode-ai/plugin/tui" {
         }>;
       };
       session?: {
-        get?: (params: { path: { id: string } }) => Promise<{
+        get?: (params: {
+          sessionID: string;
+          directory?: string;
+          workspace?: string;
+        }) => Promise<{
           data?: {
-            modelID?: string;
-            providerID?: string;
+            model?: { id?: string; providerID?: string; variant?: string };
+            agent?: string;
           };
         }>;
         prompt?: (params: {

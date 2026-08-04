@@ -100,16 +100,21 @@ export async function getTuiSessionModelMeta(
   api: TuiPluginApi,
   sessionID: string,
 ): Promise<SessionModelMeta> {
-  try {
-    const response = await api.client.session?.get?.({ path: { id: sessionID } });
-    if (response?.data?.providerID || response?.data?.modelID) {
-      return {
-        providerID: response.data?.providerID,
-        modelID: response.data?.modelID,
-      };
-    }
-  } catch {
-    // Fall back to session message state below.
+  // `state.session.get` reads synchronously from the TUI's own local session
+  // state (no network round-trip, no risk of a malformed request against the
+  // real v2 client), so it reflects the session's persisted model as soon as
+  // it changes server-side -- i.e. right after the next message is sent
+  // under a newly picked model/agent. OpenCode's plugin API does not expose
+  // any signal for "the user picked a different model but hasn't sent a
+  // message yet" (verified empirically: neither `session.updated` nor the
+  // SDK-typed `session.next.model.switched`/`session.next.agent.switched`
+  // events fire for that picker interaction in 1.17.15), so a Tab/model-pick
+  // alone cannot update the compact line before the next send.
+  const session = api.state.session.get?.(sessionID);
+  const providerID = session?.model?.providerID;
+  const modelID = session?.model?.id;
+  if (providerID || modelID) {
+    return { providerID, modelID };
   }
 
   return getMessageSessionModelMeta(api, sessionID);

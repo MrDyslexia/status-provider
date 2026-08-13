@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-08-12
+
+### Fixed
+
+- Compact session status (input prompt and home screen) now always shows the
+  reset countdown, orders each window as `percent reset window`, and uses the
+  same `Session`/`Weekly` window vocabulary as the toast and sidebar surfaces.
+  Previously the countdown was hidden whenever a window was untouched
+  (`0% used`), which is the common case.
+- Sidebar and toast rows now show the reset countdown for untouched windows
+  too, instead of only when some usage had already occurred.
+- TUI now reads the session's current model synchronously from TUI state
+  instead of an async client call using a stale response shape, fixing
+  compact status provider matching for the active session.
+
 ## [0.2.1] - 2026-08-02
 
 ### Fixed

@@ -225,6 +225,51 @@ describe("formatStatusRows", () => {
     expect(out).not.toContain("0.5h");
   });
 
+  it("keeps the reset countdown for classic rows at 0% used (100% remaining)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const out = formatStatusRows({
+      version: "1.0.0",
+      layout: { maxWidth: 50, narrowAt: 42, tinyAt: 32 },
+      percentDisplayMode: "used",
+      entries: [
+        {
+          name: "OpenAI",
+          percentRemaining: 100,
+          resetTimeIso: "2026-01-07T20:12:00.000Z",
+        },
+      ],
+    });
+
+    expect(out).toContain("0% used");
+    expect(out).toContain("6d 20h 12m");
+  });
+
+  it("keeps the reset countdown for grouped rows at 0% used (100% remaining)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const out = formatStatusRows({
+      version: "1.0.0",
+      style: "allWindows",
+      layout: { maxWidth: 50, narrowAt: 42, tinyAt: 32 },
+      percentDisplayMode: "used",
+      entries: [
+        {
+          name: "OpenAI Weekly",
+          group: "OpenAI (Plus)",
+          label: "Weekly:",
+          percentRemaining: 100,
+          resetTimeIso: "2026-01-07T20:12:00.000Z",
+        },
+      ],
+    });
+
+    expect(out).toContain("0% used");
+    expect(out).toContain("6d 20h 12m");
+  });
+
   it("normalizes grouped headers in all-window toast output", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-01-15T12:00:00.000Z"));

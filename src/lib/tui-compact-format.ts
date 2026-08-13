@@ -60,9 +60,15 @@ function formatCompactProviderLabel(name: string): string {
     .trim();
 }
 
+/**
+ * Normalize the window label to the same vocabulary used by the grouped toast
+ * and CLI surfaces (`Session`, `Weekly`, ...). Keeping a separate `5h`/`7d`
+ * vocabulary here made the label collide visually with the reset countdown
+ * (`5h` next to `4h 47m` reads like two competing times).
+ */
 function formatWindowLabel(label: string): string {
   const compactLabel = compactText(label.replace(/:+$/u, "").trim());
-  return compactLabel.toLowerCase() === "weekly" ? "7d" : compactLabel;
+  return compactLabel.toLowerCase() === "5h" ? "Session" : compactLabel;
 }
 
 function getBracketedProviderName(name: string): string | null {
@@ -111,12 +117,20 @@ type CompactPercentGroup = {
 
 type PendingCompactSegment = { kind: "percent"; key: string } | { kind: "value"; segment: string };
 
+/**
+ * Render a single window as `percent reset label`.
+ *
+ * The percent leads because it is the value users scan for; the reset
+ * countdown follows it, and the window label closes the segment so it never
+ * gets mistaken for a time value.
+ */
 function formatCompactWindow(
   window: CompactPercentGroup["windows"][number],
   includeLabel: boolean,
 ): string {
-  const base = includeLabel && window.label ? `${window.label} ${window.percent}` : window.percent;
-  return window.resetLabel ? `${base} ${window.resetLabel}` : base;
+  return [window.percent, window.resetLabel, includeLabel ? window.label : null]
+    .filter((part): part is string => Boolean(part))
+    .join(" ");
 }
 
 function formatCompactPercentGroupSegment(group: CompactPercentGroup): string | null {
@@ -148,8 +162,10 @@ function formatCompactEntrySegments(params: {
     const provider = getProviderName(entry);
     const percent = formatCompactPercentLabel(entry.percentRemaining, params.percentDisplayMode);
     const label = getWindowLabel(entry);
-    const resetLabel =
-      entry.percentRemaining < 100 ? formatCompactResetLabel(entry.resetTimeIso) : "";
+    // Always surface the countdown when the provider reports one. Gating it on
+    // `percentRemaining < 100` hid the reset for untouched windows, which under
+    // `percentDisplayMode: "used"` is the common `0% used` case.
+    const resetLabel = formatCompactResetLabel(entry.resetTimeIso);
     const key = provider.toLowerCase();
     let group = groups.get(key);
 

@@ -30,7 +30,7 @@ export type StatusProviderEntry =
       /** Remaining status as a percentage (may be below 0 when over status). */
       percentRemaining: number;
 
-      /** Optional ISO reset timestamp (shown when percentRemaining is < 100). */
+      /** Optional ISO reset timestamp (shown whenever present, regardless of percentRemaining). */
       resetTimeIso?: string;
     })
   | (GroupedStatusEntryMeta & {

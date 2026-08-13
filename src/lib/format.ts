@@ -241,10 +241,10 @@ export function formatStatusRows(params: {
     const emoji = textVariant === "emoji" ? `${statusEmoji(remaining)} ` : "";
     const leftText = `${emoji}${name}`;
 
-    const timeStr =
-      remaining < 100 && textVariant !== "minimal"
-        ? formatResetCountdown(resetIso, { missing: "-" })
-        : "";
+    // Always surface the reset countdown when the provider reports one.
+    // Gating this on `remaining < 100` hid the reset for untouched windows,
+    // which under `percentDisplayMode: "used"` is the common `0% used` case.
+    const timeStr = textVariant !== "minimal" ? formatResetCountdown(resetIso, { missing: "-" }) : "";
 
     if (textVariant === "minimal") {
       addMinimalPercentLine(leftText, coloredPercentLabel);

@@ -71,7 +71,7 @@ describe("buildCompactStatusStatusLine", () => {
       },
     });
 
-    expect(line).toBe("Gemini CLI Gemini Pro 20%, Gemini Flash 50%, Gemini Flash Lite 10%");
+    expect(line).toBe("Gemini CLI 20% Gemini Pro, 50% Gemini Flash, 10% Gemini Flash Lite");
   });
 
   it("preserves explicit non-duration compact labels when multiple rows share a provider", () => {
@@ -89,7 +89,7 @@ describe("buildCompactStatusStatusLine", () => {
       },
     });
 
-    expect(line).toBe("Cursor API 25%, Requests 50% | Kimi Code Fast 80%, Slow 40%");
+    expect(line).toBe("Cursor 25% API, 50% Requests | Kimi Code 80% Fast, 40% Slow");
   });
 
   it("groups multiple percent windows under one provider with compact window labels", () => {
@@ -115,7 +115,7 @@ describe("buildCompactStatusStatusLine", () => {
       },
     });
 
-    expect(line).toBe("OpenAI Pro 5h 100%, 7d 100%");
+    expect(line).toBe("OpenAI Pro 100% Session, 100% Weekly");
   });
 
   it("keeps compact status provider labels intentionally short", () => {
@@ -191,10 +191,13 @@ describe("buildCompactStatusStatusLine", () => {
       },
     });
 
-    expect(line).toBe("OpenAI Pro 5h 82% 4h 0m, 7d 40% 3d 0h 0m");
+    expect(line).toBe("OpenAI Pro 82% 4h 0m Session, 40% 3d 0h 0m Weekly");
   });
 
-  it("omits the reset countdown when the entry is at 100% remaining", () => {
+  it("keeps the reset countdown when the entry is at 100% remaining", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
     const line = buildCompactStatusStatusLine({
       percentDisplayMode: "remaining",
       maxWidth: 96,
@@ -203,14 +206,100 @@ describe("buildCompactStatusStatusLine", () => {
           {
             name: "Claude Sonnet",
             percentRemaining: 100,
-            resetTimeIso: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+            resetTimeIso: "2026-01-01T04:00:00.000Z",
           },
         ],
         errors: [],
       },
     });
 
-    expect(line).toBe("Claude Sonnet 100%");
+    expect(line).toBe("Claude Sonnet 100% 4h 0m");
+  });
+
+  it("keeps the reset countdown for untouched windows under used percent mode", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const line = buildCompactStatusStatusLine({
+      percentDisplayMode: "used",
+      maxWidth: 96,
+      data: {
+        entries: [
+          {
+            name: "Claude 5h",
+            group: "Claude",
+            label: "5h:",
+            percentRemaining: 100,
+            resetTimeIso: "2026-01-01T04:47:00.000Z",
+          },
+          {
+            name: "Claude Weekly",
+            group: "Claude",
+            label: "Weekly:",
+            percentRemaining: 100,
+            resetTimeIso: "2026-01-05T17:47:00.000Z",
+          },
+        ],
+        errors: [],
+      },
+    });
+
+    expect(line).toBe("Claude 0% 4h 47m Session, 0% 4d 17h 47m Weekly");
+  });
+
+  it("orders each window as percent, reset, then window label", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const line = buildCompactStatusStatusLine({
+      percentDisplayMode: "used",
+      maxWidth: 96,
+      data: {
+        entries: [
+          {
+            name: "Claude 5h",
+            group: "Claude",
+            label: "5h:",
+            percentRemaining: 89,
+            resetTimeIso: "2026-01-01T04:47:00.000Z",
+          },
+          {
+            name: "Claude Weekly",
+            group: "Claude",
+            label: "Weekly:",
+            percentRemaining: 99,
+            resetTimeIso: "2026-01-05T17:47:00.000Z",
+          },
+        ],
+        errors: [],
+      },
+    });
+
+    expect(line).toBe("Claude 11% 4h 47m Session, 1% 4d 17h 47m Weekly");
+  });
+
+  it("omits the window label for single-window providers", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const line = buildCompactStatusStatusLine({
+      percentDisplayMode: "used",
+      maxWidth: 96,
+      data: {
+        entries: [
+          {
+            name: "OpenAI weekly window",
+            group: "OpenAI (Plus)",
+            label: "Weekly:",
+            percentRemaining: 100,
+            resetTimeIso: "2026-01-07T20:12:00.000Z",
+          },
+        ],
+        errors: [],
+      },
+    });
+
+    expect(line).toBe("OpenAI Plus 0% 6d 20h 12m");
   });
 
   it("appends a detailed reset countdown to value entries when present", () => {

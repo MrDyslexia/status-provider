@@ -242,13 +242,12 @@ export function formatStatusRowsGrouped(params: {
 
       const label = resolveGroupedRowLabel(entry);
 
-      // Percent entries
-      // Show reset countdown whenever status is not fully available.
-      // (i.e., any usage at all, or depleted)
+      // Percent entries. Always surface the reset countdown when the provider
+      // reports one — gating this on `percentRemaining < 100` hid the reset
+      // for untouched windows, which under `percentDisplayMode: "used"` is
+      // the common `0% used` case.
       const timeStr =
-        entry.percentRemaining < 100 && textVariant !== "minimal"
-          ? formatResetCountdown(entry.resetTimeIso)
-          : "";
+        textVariant !== "minimal" ? formatResetCountdown(entry.resetTimeIso) : "";
       const displayedPercent = resolveDisplayedPercent(
         entry.percentRemaining,
         params.percentDisplayMode,

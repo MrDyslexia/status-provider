@@ -16,8 +16,7 @@ import { join } from "path";
 import { homedir, platform } from "os";
 import { promisify } from "util";
 
-import { getAuthPath, invalidateAuthFileCache, readAuthFileCached } from "./opencode-auth.js";
-import { writeJsonAtomic } from "./atomic-json.js";
+import { invalidateAuthFileCache, readAuthFileCached } from "./opencode-auth.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -214,7 +213,7 @@ async function readCCSCredentials(credentialsPath: string): Promise<OAuthTokens 
 export async function refreshViaClaudeCli(binaryPath?: string): Promise<OAuthTokens | null> {
   const cmd = binaryPath?.trim() || CLAUDE_CMD;
   try {
-    await execFileAsync(cmd, ["--print", "--model", "claude-haiku-4", "ping"], {
+    await execFileAsync(cmd, ["--print", "ping"], {
       timeout: 30_000,
       env: { ...process.env, TERM: "dumb" },
     });
@@ -276,7 +275,7 @@ export interface AnthropicAuthEntry {
  * 2. readClaudeCodeCredentials() (disk / Keychain)
  * 3. refreshViaClaudeCli() (forces CLI to refresh then re-reads disk)
  *
- * On success, writes the new tokens to auth.json.
+ * The caller owns persistence through OpenCode's `client.auth.set` API.
  * Returns the new tokens or null if all methods failed.
  */
 export async function refreshAnthropicAuth(
@@ -301,7 +300,6 @@ export async function refreshAnthropicAuth(
   if (refreshToken) {
     try {
       const fresh = await refreshTokensSafe(refreshToken);
-      await writeAnthropicTokensToAuthJson(fresh);
       return fresh;
     } catch {
       // fall through
@@ -311,7 +309,6 @@ export async function refreshAnthropicAuth(
   // 2. Read from disk / Keychain (may be already-fresh after an out-of-band refresh)
   const kc = await readClaudeCodeCredentials();
   if (kc && !isExpiringSoon(kc.expires)) {
-    await writeAnthropicTokensToAuthJson(kc);
     clearRefreshInFlight();
     setCurrentRefreshToken(kc.refresh);
     return kc;
@@ -320,40 +317,10 @@ export async function refreshAnthropicAuth(
   // 3. Force CLI refresh, then re-read from disk
   const cli = await refreshViaClaudeCli(binaryPath);
   if (cli && !isExpiringSoon(cli.expires)) {
-    await writeAnthropicTokensToAuthJson(cli);
     clearRefreshInFlight();
     setCurrentRefreshToken(cli.refresh);
     return cli;
   }
 
   return null;
-}
-
-// ---------------------------------------------------------------------------
-// Write new tokens back to auth.json
-// ---------------------------------------------------------------------------
-
-async function writeAnthropicTokensToAuthJson(tokens: OAuthTokens): Promise<void> {
-  try {
-    const authPath = getAuthPath();
-    let existing: Record<string, unknown> = {};
-    try {
-      const raw = await readFile(authPath, "utf-8");
-      existing = JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      // start with empty object
-    }
-
-    existing["anthropic"] = {
-      type: "oauth",
-      access: tokens.access,
-      refresh: tokens.refresh,
-      expires: tokens.expires,
-    };
-
-    await writeJsonAtomic(authPath, existing, { trailingNewline: true });
-    invalidateAuthFileCache();
-  } catch {
-    // persistence failure must not break the refresh
-  }
 }

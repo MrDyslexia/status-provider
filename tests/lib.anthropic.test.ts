@@ -16,7 +16,10 @@ import {
   clearReadAuthFileCacheForTests,
   readAuthFileCached,
 } from "../src/lib/opencode-auth.js";
-import { refreshAnthropicAuth } from "../src/lib/anthropic-credentials.js";
+import {
+  refreshAnthropicAuth,
+  refreshViaClaudeCli,
+} from "../src/lib/anthropic-credentials.js";
 
 vi.mock("child_process", () => ({
   execFile: vi.fn(),
@@ -1014,7 +1017,7 @@ describe("hasAnthropicCredentialsConfigured fast path", () => {
     await expect(hasAnthropicCredentialsConfigured()).resolves.toBe(false);
   });
 
-  it("attempts an OAuth refresh when auth.json access token is expired, and falls to the CLI probe if the refresh fails", async () => {
+  it("detects expired OpenCode OAuth without refreshing from the availability observer", async () => {
     vi.mocked(readAuthFileCached).mockResolvedValue({
       anthropic: {
         type: "oauth",
@@ -1023,39 +1026,34 @@ describe("hasAnthropicCredentialsConfigured fast path", () => {
         expires: Date.now() - 60 * 1000,
       },
     });
-    vi.mocked(refreshAnthropicAuth).mockResolvedValue(null);
+    await expect(hasAnthropicCredentialsConfigured()).resolves.toBe(true);
+    expect(refreshAnthropicAuth).not.toHaveBeenCalled();
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it("reports expired OpenCode OAuth instead of not detected when Claude CLI is logged out", async () => {
+    vi.mocked(readAuthFileCached).mockResolvedValue({
+      anthropic: {
+        type: "oauth",
+        access: "expired-access-token",
+        refresh: "valid-refresh-token",
+        expires: Date.now() - 60 * 1000,
+      },
+    });
     mockExecSequence([
+      { stdout: "claude 1.2.3\n" },
       {
-        code: "ENOENT",
-        errorMessage: "spawn claude ENOENT",
+        code: 1,
+        stderr: "Not logged in. Run `claude auth login` to continue.",
       },
     ]);
 
-    await expect(hasAnthropicCredentialsConfigured()).resolves.toBe(false);
-    expect(refreshAnthropicAuth).toHaveBeenCalled();
-    // Slow path was attempted because the refresh attempt also failed.
-    expect(execFileMock).toHaveBeenCalled();
-  });
+    const diagnostics = await getAnthropicDiagnostics();
 
-  it("returns true when auth.json access token is expired but the refresh chain recovers a fresh token (bugfix/status-provider-anthropic-token-refresh)", async () => {
-    vi.mocked(readAuthFileCached).mockResolvedValue({
-      anthropic: {
-        type: "oauth",
-        access: "expired-access-token",
-        refresh: "valid-refresh-token",
-        expires: Date.now() - 60 * 1000,
-      },
-    });
-    vi.mocked(refreshAnthropicAuth).mockResolvedValue({
-      access: "fresh-access-token",
-      refresh: "fresh-refresh-token",
-      expires: Date.now() + 60 * 60 * 1000,
-    });
-
-    await expect(hasAnthropicCredentialsConfigured()).resolves.toBe(true);
-    expect(refreshAnthropicAuth).toHaveBeenCalled();
-    // The CLI probe (slow path) must not run once the refresh succeeds.
-    expect(execFileMock).not.toHaveBeenCalled();
+    expect(diagnostics.authStatus).toBe("authenticated");
+    expect(diagnostics.statusSource).toBe("auth-expired");
+    expect(diagnostics.message).toContain("expired");
+    expect(refreshAnthropicAuth).not.toHaveBeenCalled();
   });
 
   it("returns false when auth.json is malformed and CLI is missing", async () => {
@@ -1070,5 +1068,31 @@ describe("hasAnthropicCredentialsConfigured fast path", () => {
     ]);
 
     await expect(hasAnthropicCredentialsConfigured()).resolves.toBe(false);
+  });
+});
+
+describe("refreshViaClaudeCli", () => {
+  it("does not pin an obsolete Claude model while triggering credential refresh", async () => {
+    mockExecSequence([{ stdout: "pong\n" }]);
+    readFileMock.mockResolvedValue(
+      JSON.stringify({
+        claudeAiOauth: {
+          accessToken: "fresh-access-token",
+          refreshToken: "fresh-refresh-token",
+          expiresAt: Date.now() + 60 * 60 * 1000,
+        },
+      }),
+    );
+
+    await expect(refreshViaClaudeCli()).resolves.toMatchObject({
+      access: "fresh-access-token",
+      refresh: "fresh-refresh-token",
+    });
+    expect(execFileMock).toHaveBeenCalledWith(
+      "claude",
+      ["--print", "ping"],
+      expect.objectContaining({ timeout: 30_000 }),
+      expect.any(Function),
+    );
   });
 });

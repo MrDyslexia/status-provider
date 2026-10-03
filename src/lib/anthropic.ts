@@ -17,9 +17,7 @@ import { sanitizeDisplaySnippet, sanitizeDisplayText } from "./display-sanitize.
 import { fetchWithTimeout } from "./http.js";
 import { getAuthPath, invalidateAuthFileCache, readAuthFileCached } from "./opencode-auth.js";
 import {
-  refreshAnthropicAuth,
   isExpiringSoon,
-  type AnthropicAuthEntry,
 } from "./anthropic-credentials.js";
 
 const DEFAULT_CLAUDE_BINARY = "claude";
@@ -744,9 +742,9 @@ async function readClaudeCredentialsAccessTokenFromFile(): Promise<ClaudeCredent
  * `anthropic` key), as written by companion plugins such as
  * `opencode-anthropic-login-via-cli`.
  *
- * Returns `not-found` when there is no `auth.json`, no `anthropic` entry, or
- * the entry is not an OAuth credential. Returns `unavailable` with a `detail`
- * string when the entry exists but the access token is missing or expired.
+ * This status reader never refreshes credentials. OAuth refresh ownership
+ * belongs to the server auth hook so TUI polling cannot rotate the same token
+ * concurrently from another process.
  */
 async function readClaudeCredentialsAccessTokenFromOpencodeAuth(): Promise<ClaudeCredentialSourceResult> {
   try {
@@ -765,26 +763,11 @@ async function readClaudeCredentialsAccessTokenFromOpencodeAuth(): Promise<Claud
 
       case "auth-expired":
       case "no-refresh-token":
-      case "no-access-token": {
-        // Attempt a proactive OAuth token refresh using status-fork's own
-        // credential refresh chain (mirrors opencode-anthropic-login-via-cli).
-        const auth = await readAuthFileCached({ maxAgeMs: 0 });
-        const entry = (auth as { anthropic?: AnthropicAuthEntry } | null)?.anthropic;
-        if (entry && typeof entry === "object") {
-          try {
-            const fresh = await refreshAnthropicAuth(entry);
-            if (fresh && !isExpiringSoon(fresh.expires)) {
-              return { state: "configured", accessToken: fresh.access };
-            }
-          } catch {
-            // fall through to unavailable
-          }
-        }
+      case "no-access-token":
         return {
           state: "unavailable",
           detail: formatAnthropicAuthStateDetail(stateInfo),
         };
-      }
 
       case "no-auth":
       default:
@@ -1366,6 +1349,24 @@ export async function getAnthropicDiagnostics(
       return mapLocalDiagnosticsToAnthropicDiagnostics(localDiagnostics);
     }
 
+    const opencodeAuthState = await readAnthropicAuthState();
+    if (
+      opencodeAuthState.state === "auth-expired" ||
+      opencodeAuthState.state === "auth-refreshing"
+    ) {
+      const diagnostics: AnthropicDiagnostics = {
+        installed: localDiagnostics.installed,
+        version: localDiagnostics.version,
+        authStatus: "authenticated",
+        statusSupported: false,
+        statusSource: "auth-expired",
+        authExpiredUntil: Date.now() + DEFAULT_ANTHROPIC_AUTH_EXPIRED_BACKOFF_MS,
+        checkedCommands: localDiagnostics.checkedCommands,
+        message: formatAnthropicAuthStateDetail(opencodeAuthState),
+      };
+      return diagnostics;
+    }
+
     const credentials = await readClaudeCredentialsAccessToken();
     if (credentials.state !== "configured") {
       if (localDiagnostics.authStatus !== "authenticated") {
@@ -1467,7 +1468,9 @@ export async function getAnthropicDiagnostics(
 export async function hasAnthropicCredentialsConfigured(
   options: AnthropicProbeOptions = {},
 ): Promise<boolean> {
-  // Fast path: check OpenCode `auth.json` for a valid OAuth access token.
+  // Fast path: detect OpenCode OAuth without refreshing it. Availability
+  // checks run in both server and TUI processes; allowing either process to
+  // rotate credentials here can invalidate the other's refresh token.
   // This avoids spawning `claude --version` on every provider-availability
   // check, which would otherwise make the Anthropic status provider look
   // unavailable whenever the Claude Code CLI is not already running in
@@ -1475,15 +1478,9 @@ export async function hasAnthropicCredentialsConfigured(
   // (such as the absorbed `opencode-anthropic-login-via-cli`) and is the
   // canonical source for OAuth credentials on this fork.
   //
-  // Bug: an OAuth entry that is present but locally expired used to be
-  // treated the same as "no credentials" here, even though
-  // readClaudeCredentialsAccessTokenFromOpencodeAuth() already knows how to
-  // refresh exactly that state. That mismatch made isAvailable() report
-  // "Unavailable (not detected)" for accounts that were actually valid and
-  // refreshable (see bugfix/status-provider-anthropic-token-refresh).
   try {
-    const credentials = await readClaudeCredentialsAccessTokenFromOpencodeAuth();
-    if (credentials.state === "configured") {
+    const authState = await readAnthropicAuthState();
+    if (authState.state !== "no-auth" && authState.state !== "no-access-token") {
       return true;
     }
   } catch {

@@ -1798,24 +1798,21 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
             model.cost = { input: 0, output: 0, cache: { read: 0, write: 0 } };
           }
 
-          // setAuth writes new tokens to OpenCode's provider auth store.
+          // OpenCode is the only writer for provider credentials. Direct
+          // auth.json writes can clobber a token rotated by another provider.
           const setAuth = async (tokens: OAuthTokens): Promise<void> => {
-            try {
-              const typedClient2 = client as unknown as {
-                auth: {
-                  set: (params: {
-                    path: { id: string };
-                    body: { type: string; access: string; refresh: string; expires: number };
-                  }) => Promise<unknown>;
-                };
+            const typedClient2 = client as unknown as {
+              auth: {
+                set: (params: {
+                  path: { id: string };
+                  body: { type: string; access: string; refresh: string; expires: number };
+                }) => Promise<unknown>;
               };
-              await typedClient2.auth.set({
-                path: { id: "anthropic" },
-                body: { type: "oauth", ...tokens },
-              });
-            } catch {
-              // best-effort — anthropic-credentials.ts also writes auth.json directly
-            }
+            };
+            await typedClient2.auth.set({
+              path: { id: "anthropic" },
+              body: { type: "oauth", ...tokens },
+            });
           };
 
           const binaryPath = config.anthropicBinaryPath;

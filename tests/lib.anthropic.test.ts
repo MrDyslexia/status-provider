@@ -17,6 +17,7 @@ import {
   readAuthFileCached,
 } from "../src/lib/opencode-auth.js";
 import {
+  parseAnthropicOAuthCode,
   refreshAnthropicAuth,
   refreshViaClaudeCli,
 } from "../src/lib/anthropic-credentials.js";
@@ -1094,5 +1095,27 @@ describe("refreshViaClaudeCli", () => {
       expect.objectContaining({ timeout: 30_000 }),
       expect.any(Function),
     );
+  });
+});
+
+describe("parseAnthropicOAuthCode", () => {
+  it("strips the #state suffix from Anthropic's copy-paste code format", () => {
+    expect(parseAnthropicOAuthCode("abc123#stateXYZ")).toBe("abc123");
+  });
+
+  it("returns the raw string unchanged when there is no state suffix", () => {
+    expect(parseAnthropicOAuthCode("abc123")).toBe("abc123");
+  });
+
+  it("trims surrounding whitespace before parsing", () => {
+    expect(parseAnthropicOAuthCode("  abc123#stateXYZ  \n")).toBe("abc123");
+  });
+
+  it("extracts the code query param when a full callback URL is pasted", () => {
+    expect(
+      parseAnthropicOAuthCode(
+        "https://platform.claude.com/oauth/code/callback?code=abc123&state=stateXYZ",
+      ),
+    ).toBe("abc123");
   });
 });

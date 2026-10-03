@@ -88,6 +88,7 @@ import {
   resetRefreshState,
   ANTHROPIC_OAUTH_CLIENT_ID,
   ANTHROPIC_TOKEN_URL,
+  parseAnthropicOAuthCode,
   type OAuthTokens,
 } from "./lib/anthropic-credentials.js";
 import { createCustomFetch, type AuthState } from "./lib/anthropic-custom-fetch.js";
@@ -1923,32 +1924,42 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
             const DEFAULT_SCOPES =
               "org:create_api_key user:file_upload user:inference user:mcp_servers user:profile user:sessions:claude_code";
             const params = new URLSearchParams({
+              code: "true",
               response_type: "code",
               client_id: ANTHROPIC_OAUTH_CLIENT_ID,
               redirect_uri: REDIRECT_URI,
               scope: DEFAULT_SCOPES,
               code_challenge: challenge,
               code_challenge_method: "S256",
+              state: verifier,
             });
             return {
               url: `${AUTHORIZE_URL}?${params}`,
               instructions:
                 "Open the link above to authenticate with your Claude account. After authorizing, paste the code below.",
               method: "code" as const,
-              async callback(code: string) {
+              async callback(rawCode: string) {
+                const code = parseAnthropicOAuthCode(rawCode);
                 const body = new URLSearchParams({
                   grant_type: "authorization_code",
                   code,
                   redirect_uri: REDIRECT_URI,
                   client_id: ANTHROPIC_OAUTH_CLIENT_ID,
                   code_verifier: verifier,
+                  state: verifier,
                 });
                 const res = await fetch(ANTHROPIC_TOKEN_URL, {
                   method: "POST",
                   headers: { "Content-Type": "application/x-www-form-urlencoded" },
                   body: body.toString(),
                 });
-                if (!res.ok) return { type: "failed" as const };
+                if (!res.ok) {
+                  const errorBody = await res.text().catch(() => "<unreadable body>");
+                  console.error(
+                    `[status-provider] Anthropic OAuth token exchange failed: ${res.status} ${res.statusText} — ${errorBody}`,
+                  );
+                  return { type: "failed" as const };
+                }
                 const data = (await res.json()) as {
                   access_token: string;
                   refresh_token: string;

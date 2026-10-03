@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Anthropic status polling is now read-only, preventing TUI and server processes
+  from concurrently rotating the same OAuth refresh token.
+- Anthropic token refresh now persists exclusively through OpenCode's auth API,
+  avoiding full-file `auth.json` writes that could restore stale OpenAI tokens.
+- Expired Anthropic OAuth is reported as reauthentication required instead of
+  incorrectly appearing as an undetected provider.
+- Claude CLI refresh fallback no longer pins the obsolete `claude-haiku-4`
+  model.
+- Anthropic browser login (`/connect`) now sends `code=true` and `state` in the
+  authorization URL, parses Anthropic's `code#state` paste format before the
+  token exchange, and logs the HTTP error body when the exchange fails.
+
 ## [0.2.2] - 2026-08-12
 
 ### Fixed

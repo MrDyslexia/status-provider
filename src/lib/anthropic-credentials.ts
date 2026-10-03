@@ -27,6 +27,29 @@ const execFileAsync = promisify(execFile);
 export const ANTHROPIC_OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 export const ANTHROPIC_TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
 
+/**
+ * Anthropic's authorize screen shows the user a single string to copy in the
+ * form `<code>#<state>` (not a redirect). Some Claude accounts/regions
+ * instead redirect to a real callback URL with `?code=...&state=...` query
+ * params. Accept both, always returning only the bare authorization code —
+ * sending the full `code#state` string to the token endpoint as-is is
+ * rejected as an invalid grant.
+ */
+export function parseAnthropicOAuthCode(raw: string): string {
+  const trimmed = raw.trim();
+
+  try {
+    const url = new URL(trimmed);
+    const code = url.searchParams.get("code");
+    if (code) return code;
+  } catch {
+    // not a URL — fall through to the "code#state" paste format
+  }
+
+  const hashIndex = trimmed.indexOf("#");
+  return hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed;
+}
+
 /** Refresh the token this many ms before it actually expires. */
 const REFRESH_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
 

@@ -17,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   incorrectly appearing as an undetected provider.
 - Claude CLI refresh fallback no longer pins the obsolete `claude-haiku-4`
   model.
+- Anthropic token requests (code exchange and refresh) now send a `User-Agent`.
+  Anthropic's token endpoint answers `429 rate_limit_error` to requests without
+  one, which broke browser login and could break token refresh.
+- Anthropic browser login aligned with Claude Code 2.1.287: adds the
+  `user:plugins` scope, posts the code exchange as JSON, and uses a `state`
+  separate from the PKCE verifier.
 - Anthropic browser login (`/connect`) now sends `code=true` and `state` in the
   authorization URL, parses Anthropic's `code#state` paste format before the
   token exchange, and logs the HTTP error body when the exchange fails.

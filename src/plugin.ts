@@ -88,7 +88,8 @@ import {
   resetRefreshState,
   ANTHROPIC_OAUTH_CLIENT_ID,
   ANTHROPIC_TOKEN_URL,
-  parseAnthropicOAuthCode,
+  buildAnthropicAuthorizeUrl,
+  exchangeAnthropicAuthorizationCode,
   type OAuthTokens,
 } from "./lib/anthropic-credentials.js";
 import { createCustomFetch, type AuthState } from "./lib/anthropic-custom-fetch.js";
@@ -1919,58 +1920,29 @@ export const StatusProviderPlugin: Plugin = async ({ client }) => {
               buf.toString("base64url").replace(/=+$/, "");
             const verifier = base64url(randomBytes(32));
             const challenge = base64url(createHash("sha256").update(verifier).digest());
-            const AUTHORIZE_URL = "https://claude.com/cai/oauth/authorize";
-            const REDIRECT_URI = "https://platform.claude.com/oauth/code/callback";
-            const DEFAULT_SCOPES =
-              "org:create_api_key user:file_upload user:inference user:mcp_servers user:profile user:sessions:claude_code";
-            const params = new URLSearchParams({
-              code: "true",
-              response_type: "code",
-              client_id: ANTHROPIC_OAUTH_CLIENT_ID,
-              redirect_uri: REDIRECT_URI,
-              scope: DEFAULT_SCOPES,
-              code_challenge: challenge,
-              code_challenge_method: "S256",
-              state: verifier,
-            });
+            // Separate from the verifier: the state travels in the URL, the verifier must not.
+            const state = base64url(randomBytes(32));
             return {
-              url: `${AUTHORIZE_URL}?${params}`,
+              url: buildAnthropicAuthorizeUrl({ challenge, state }),
               instructions:
                 "Open the link above to authenticate with your Claude account. After authorizing, paste the code below.",
               method: "code" as const,
               async callback(rawCode: string) {
-                const code = parseAnthropicOAuthCode(rawCode);
-                const body = new URLSearchParams({
-                  grant_type: "authorization_code",
-                  code,
-                  redirect_uri: REDIRECT_URI,
-                  client_id: ANTHROPIC_OAUTH_CLIENT_ID,
-                  code_verifier: verifier,
-                  state: verifier,
-                });
-                const res = await fetch(ANTHROPIC_TOKEN_URL, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/x-www-form-urlencoded" },
-                  body: body.toString(),
-                });
-                if (!res.ok) {
-                  const errorBody = await res.text().catch(() => "<unreadable body>");
+                try {
+                  const tokens = await exchangeAnthropicAuthorizationCode({
+                    rawCode,
+                    verifier,
+                    state,
+                  });
+                  return { type: "success" as const, ...tokens };
+                } catch (error) {
                   console.error(
-                    `[status-provider] Anthropic OAuth token exchange failed: ${res.status} ${res.statusText} — ${errorBody}`,
+                    `[status-provider] Anthropic OAuth token exchange failed: ${
+                      error instanceof Error ? error.message : String(error)
+                    }`,
                   );
                   return { type: "failed" as const };
                 }
-                const data = (await res.json()) as {
-                  access_token: string;
-                  refresh_token: string;
-                  expires_in: number;
-                };
-                return {
-                  type: "success" as const,
-                  access: data.access_token,
-                  refresh: data.refresh_token,
-                  expires: Date.now() + data.expires_in * 1000,
-                };
               },
             };
           },

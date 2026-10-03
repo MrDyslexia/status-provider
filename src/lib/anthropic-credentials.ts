@@ -26,6 +26,87 @@ const execFileAsync = promisify(execFile);
 
 export const ANTHROPIC_OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
 export const ANTHROPIC_TOKEN_URL = "https://platform.claude.com/v1/oauth/token";
+/**
+ * Anthropic's token endpoint answers 429 rate_limit_error to requests that
+ * carry no User-Agent (verified with curl: no UA -> 429, any UA -> normal
+ * response). Always send an identifying one on token requests.
+ */
+export const ANTHROPIC_TOKEN_USER_AGENT = "status-provider";
+
+export const ANTHROPIC_AUTHORIZE_URL = "https://claude.com/cai/oauth/authorize";
+export const ANTHROPIC_MANUAL_REDIRECT_URI = "https://platform.claude.com/oauth/code/callback";
+
+/**
+ * Scopes requested by Claude Code 2.1.287 for a claude.ai subscription login
+ * (order preserved). Verified against the authorize URL that
+ * `claude auth login --claudeai` prints.
+ */
+export const ANTHROPIC_OAUTH_SCOPES = [
+  "org:create_api_key",
+  "user:profile",
+  "user:inference",
+  "user:sessions:claude_code",
+  "user:mcp_servers",
+  "user:file_upload",
+  "user:plugins",
+] as const;
+
+/** Build the manual-paste authorization URL, mirroring Claude Code's parameters. */
+export function buildAnthropicAuthorizeUrl(params: { challenge: string; state: string }): string {
+  const url = new URL(ANTHROPIC_AUTHORIZE_URL);
+  url.searchParams.append("code", "true");
+  url.searchParams.append("client_id", ANTHROPIC_OAUTH_CLIENT_ID);
+  url.searchParams.append("response_type", "code");
+  url.searchParams.append("redirect_uri", ANTHROPIC_MANUAL_REDIRECT_URI);
+  url.searchParams.append("scope", ANTHROPIC_OAUTH_SCOPES.join(" "));
+  url.searchParams.append("code_challenge", params.challenge);
+  url.searchParams.append("code_challenge_method", "S256");
+  url.searchParams.append("state", params.state);
+  return url.toString();
+}
+
+/**
+ * Exchange an authorization code for tokens. Claude Code posts this request as
+ * JSON (not form-encoded). Throws with the HTTP status and body on failure.
+ */
+export async function exchangeAnthropicAuthorizationCode(params: {
+  rawCode: string;
+  verifier: string;
+  state: string;
+  fetchImpl?: typeof fetch;
+}): Promise<OAuthTokens> {
+  const doFetch = params.fetchImpl ?? fetch;
+  const res = await doFetch(ANTHROPIC_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json, text/plain, */*",
+      "User-Agent": ANTHROPIC_TOKEN_USER_AGENT,
+    },
+    body: JSON.stringify({
+      grant_type: "authorization_code",
+      code: parseAnthropicOAuthCode(params.rawCode),
+      redirect_uri: ANTHROPIC_MANUAL_REDIRECT_URI,
+      client_id: ANTHROPIC_OAUTH_CLIENT_ID,
+      code_verifier: params.verifier,
+      state: params.state,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "<unreadable body>");
+    throw new Error(`Token exchange failed: ${res.status} ${res.statusText} — ${text}`);
+  }
+  const data = (await res.json()) as {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  };
+  return {
+    access: data.access_token,
+    refresh: data.refresh_token,
+    expires: Date.now() + data.expires_in * 1000,
+  };
+}
 
 /**
  * Anthropic's authorize screen shows the user a single string to copy in the
@@ -103,7 +184,10 @@ async function refreshTokens(refreshToken: string): Promise<OAuthTokens> {
 
   const res = await fetch(ANTHROPIC_TOKEN_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "User-Agent": ANTHROPIC_TOKEN_USER_AGENT,
+    },
     body: body.toString(),
   });
 

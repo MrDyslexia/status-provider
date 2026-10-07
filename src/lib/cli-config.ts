@@ -109,6 +109,7 @@ interface PendingChanges {
   enableToast?: boolean;
   debug?: boolean;
   showSessionTokens?: boolean;
+  showSessionTimer?: boolean;
   minIntervalMs?: number;
   toastDurationMs?: number;
   onlyCurrentModel?: boolean;
@@ -324,6 +325,21 @@ export async function runCliConfigCommand(options: RunCliConfigCommandOptions = 
     const showSessionTokensValue = showSessionTokens as boolean;
     if (showSessionTokensValue !== config.showSessionTokens) {
       changes.showSessionTokens = showSessionTokensValue;
+    }
+
+    const showSessionTimer = await prompts.confirm({
+      message: "Show the session stopwatch (elapsed time) in the TUI?",
+      initialValue: config.showSessionTimer,
+    });
+
+    if (prompts.isCancel(showSessionTimer)) {
+      prompts.cancel("Cancelled.");
+      return 0;
+    }
+
+    const showSessionTimerValue = showSessionTimer as boolean;
+    if (showSessionTimerValue !== config.showSessionTimer) {
+      changes.showSessionTimer = showSessionTimerValue;
     }
 
     const onlyCurrentModel = await prompts.confirm({
@@ -742,6 +758,10 @@ async function applyChanges(params: {
     setOrDelete("showSessionTokens", params.changes.showSessionTokens, c.showSessionTokens);
   }
 
+  if ("showSessionTimer" in params.changes) {
+    setOrDelete("showSessionTimer", params.changes.showSessionTimer, c.showSessionTimer);
+  }
+
   if ("onlyCurrentModel" in params.changes) {
     setOrDelete("onlyCurrentModel", params.changes.onlyCurrentModel, c.onlyCurrentModel);
   }
@@ -930,6 +950,7 @@ function buildPreview(params: {
     ["percentDisplayMode", c.percentDisplayMode],
     ["enableToast", String(c.enableToast)],
     ["showSessionTokens", String(c.showSessionTokens)],
+    ["showSessionTimer", String(c.showSessionTimer)],
     ["onlyCurrentModel", String(c.onlyCurrentModel)],
     ["debug", String(c.debug)],
     ["minIntervalMs", `${c.minIntervalMs} ms (${Math.round(c.minIntervalMs / 60000)} min)`],
@@ -953,6 +974,7 @@ function buildPreview(params: {
     ["percentDisplayMode", "percentDisplayMode" in params.changes ? params.changes.percentDisplayMode! : c.percentDisplayMode],
     ["enableToast", "enableToast" in params.changes ? String(params.changes.enableToast) : String(c.enableToast)],
     ["showSessionTokens", "showSessionTokens" in params.changes ? String(params.changes.showSessionTokens) : String(c.showSessionTokens)],
+    ["showSessionTimer", "showSessionTimer" in params.changes ? String(params.changes.showSessionTimer) : String(c.showSessionTimer)],
     ["onlyCurrentModel", "onlyCurrentModel" in params.changes ? String(params.changes.onlyCurrentModel) : String(c.onlyCurrentModel)],
     ["debug", "debug" in params.changes ? String(params.changes.debug) : String(c.debug)],
     ["minIntervalMs", "minIntervalMs" in params.changes ? `${params.changes.minIntervalMs} ms (${Math.round(params.changes.minIntervalMs! / 60000)} min)` : `${c.minIntervalMs} ms (${Math.round(c.minIntervalMs / 60000)} min)`],

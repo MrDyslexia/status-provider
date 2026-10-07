@@ -153,6 +153,12 @@ export interface StatusProviderConfig {
    */
   showSessionTokens: boolean;
 
+  /**
+   * Show a session stopwatch (elapsed time since the session was created)
+   * in the TUI sidebar and compact prompt line.
+   */
+  showSessionTimer: boolean;
+
   /** TUI sidebar panel visibility when the TUI plugin is installed. */
   tuiSidebarPanel: TuiSidebarPanelConfig;
 
@@ -218,6 +224,7 @@ export const DEFAULT_CONFIG: StatusProviderConfig = {
   toastDurationMs: 9000,
   onlyCurrentModel: false,
   showSessionTokens: true,
+  showSessionTimer: true,
   tuiSidebarPanel: {
     enabled: true,
   },

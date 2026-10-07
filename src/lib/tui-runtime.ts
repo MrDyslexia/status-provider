@@ -140,6 +140,8 @@ export type TuiSurfaceRegistration = {
 export type TuiSessionStatusSurfaces = {
   sidebar: SidebarPanelState;
   compact: CompactStatusState;
+  /** Whether the session stopwatch should render (sidebar + compact line). */
+  showSessionTimer: boolean;
 };
 
 export type TuiManualToast = {
@@ -163,6 +165,7 @@ function buildDisabledSessionStatusSurfaces(): TuiSessionStatusSurfaces {
   return {
     sidebar: { status: "disabled", lines: [] },
     compact: { status: "disabled" },
+    showSessionTimer: false,
   };
 }
 
@@ -348,6 +351,7 @@ export async function loadTuiSessionStatusSurfaces(params: {
             enabled: true,
           })
         : { status: "disabled" },
+    showSessionTimer: runtime.config.showSessionTimer,
   };
 }
 

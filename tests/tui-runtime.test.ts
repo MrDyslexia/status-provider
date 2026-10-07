@@ -789,6 +789,7 @@ describe("tui runtime helpers", () => {
 
     expect(surfaces).toEqual({
       sidebar: { status: "disabled", lines: [] },
+      showSessionTimer: true,
       compact: { status: "ready", text: "Compact status" },
     });
     expect(collectStatusRenderData).toHaveBeenCalledOnce();
@@ -836,6 +837,7 @@ describe("tui runtime helpers", () => {
 
     expect(surfaces).toEqual({
       sidebar: { status: "disabled", lines: [] },
+      showSessionTimer: false,
       compact: { status: "disabled" },
     });
     expect(collectStatusRenderData).not.toHaveBeenCalled();
@@ -896,6 +898,7 @@ describe("tui runtime helpers", () => {
 
     expect(surfaces).toEqual({
       sidebar: { status: "ready", lines: ["Sidebar status"] },
+      showSessionTimer: true,
       compact: { status: "ready", text: "Compact status" },
     });
     expect(collectStatusRenderData).toHaveBeenCalledTimes(2);
@@ -992,6 +995,7 @@ describe("tui runtime helpers", () => {
 
     expect(surfaces).toEqual({
       sidebar: { status: "ready", lines: ["Sidebar status"] },
+      showSessionTimer: true,
       compact: { status: "ready", text: "Claude 82%" },
     });
     expect(collectStatusRenderData).toHaveBeenCalledTimes(2);
@@ -1065,6 +1069,7 @@ describe("tui runtime helpers", () => {
 
     expect(surfaces).toEqual({
       sidebar: { status: "ready", lines: ["Sidebar status"] },
+      showSessionTimer: true,
       compact: { status: "loading" },
     });
     expect(buildCompactStatusStatusLine).not.toHaveBeenCalled();
@@ -1105,6 +1110,7 @@ describe("tui runtime helpers", () => {
 
     expect(surfaces).toEqual({
       sidebar: { status: "ready", lines: [] },
+      showSessionTimer: true,
       compact: { status: "ready", text: "Status unavailable" },
     });
     expect(buildCompactStatusStatusLine).not.toHaveBeenCalled();
@@ -1151,6 +1157,7 @@ describe("tui runtime helpers", () => {
 
     expect(surfaces).toEqual({
       sidebar: { status: "loading", lines: [] },
+      showSessionTimer: true,
       compact: { status: "loading" },
     });
     expect(buildSidebarStatusPanelLines).not.toHaveBeenCalled();

@@ -17,6 +17,7 @@ import {
   shouldRenderSidebarPanel,
 } from "./lib/tui-panel-state.js";
 import { getSidebarBodyLineColor } from "./lib/tui-line-style.js";
+import { formatSessionTimerText, resolveSessionStartMs } from "./lib/session-timer.js";
 import {
   loadTuiHomeCompactStatus,
   loadTuiManualToast,
@@ -31,6 +32,7 @@ const id = "status-provider";
 const SIDEBAR_ORDER = 150;
 const COMPACT_ORDER = 90;
 const REFRESH_INTERVAL_MS = 60_000;
+const TIMER_TICK_MS = 1_000;
 const EVENT_REFRESH_DELAYS_MS = [150, 600] as const;
 const MOUNT_RECOVERY_DELAYS_MS = [500, 1_500, 4_000] as const;
 
@@ -38,6 +40,7 @@ type SessionStatusResource = {
   sessionID: string;
   sidebar: () => SidebarPanelState;
   compact: () => CompactStatusState;
+  showSessionTimer: () => boolean;
   retain: () => SessionStatusResource;
   release: () => void;
 };
@@ -66,6 +69,7 @@ function createSessionStatusResource(api: TuiPluginApi, sessionID: string): Sess
     lines: [],
   });
   const [compact, setCompact] = createSignal<CompactStatusState>({ status: "loading" });
+  const [showSessionTimer, setShowSessionTimer] = createSignal(false);
 
   let refCount = 0;
   let disposed = false;
@@ -91,6 +95,7 @@ function createSessionStatusResource(api: TuiPluginApi, sessionID: string): Sess
         if (disposed || currentVersion !== loadVersion) return;
         setSidebar(next.sidebar);
         setCompact(next.compact);
+        setShowSessionTimer(next.showSessionTimer);
       })
       .catch(() => {
         if (disposed || currentVersion !== loadVersion) return;
@@ -164,6 +169,7 @@ function createSessionStatusResource(api: TuiPluginApi, sessionID: string): Sess
     sessionID,
     sidebar,
     compact,
+    showSessionTimer,
     retain: () => {
       refCount += 1;
       return resource;
@@ -313,18 +319,64 @@ function useSessionStatusResource(
   return resource;
 }
 
+/**
+ * Ticks once per second while enabled. Kept separate from the heavy provider
+ * refresh so the stopwatch stays smooth without refetching quotas.
+ */
+function useSessionTimerText(
+  api: TuiPluginApi,
+  sessionID: () => string,
+  enabled: () => boolean,
+): () => string {
+  const [now, setNow] = createSignal(Date.now());
+  const [startMs, setStartMs] = createSignal<number | undefined>(undefined);
+
+  const refreshStart = () => {
+    const resolved = resolveSessionStartMs(api, sessionID());
+    // Keep the last known start if the host temporarily returns nothing.
+    if (resolved !== undefined) setStartMs(resolved);
+  };
+
+  createEffect(() => {
+    sessionID();
+    setStartMs(undefined);
+    refreshStart();
+  });
+
+  const interval = setInterval(() => {
+    if (!enabled()) return;
+    if (startMs() === undefined) refreshStart();
+    setNow(Date.now());
+  }, TIMER_TICK_MS);
+  onCleanup(() => clearInterval(interval));
+
+  return () => (enabled() ? formatSessionTimerText(startMs(), now()) : "");
+}
+
 function SidebarContentView(props: { api: TuiPluginApi; sessionID: string }) {
   const resource = useSessionStatusResource(props.api, () => props.sessionID);
   const panel = () => resource().sidebar();
 
   const lines = () => getSidebarPanelLines(panel());
+  const timerText = useSessionTimerText(
+    props.api,
+    () => props.sessionID,
+    () => resource().showSessionTimer(),
+  );
 
   return (
     <Show when={shouldRenderSidebarPanel(panel())}>
       <box gap={0}>
-        <text fg={props.api.theme.current.text}>
-          <b>Status</b>
-        </text>
+        <box flexDirection="row" justifyContent="space-between">
+          <text fg={props.api.theme.current.text}>
+            <b>Status</b>
+          </text>
+          <Show when={timerText() !== ""}>
+            <text fg={props.api.theme.current.textMuted} wrapMode="none">
+              {timerText()}
+            </text>
+          </Show>
+        </box>
         <box gap={0}>
           {lines().map((line) => (
             <text fg={getSidebarBodyLineColor(line, props.api.theme.current)} wrapMode="none">
@@ -340,13 +392,17 @@ function SidebarContentView(props: { api: TuiPluginApi; sessionID: string }) {
 function CompactStatusLine(props: {
   api: TuiPluginApi;
   panel: () => CompactStatusState;
+  prefix?: () => string;
   justifyContent: "flex-start" | "center" | "flex-end";
   blankLineBefore?: boolean;
 }) {
   const text = () => {
     const panel = props.panel();
     if (!shouldRenderCompactStatus(panel)) return "";
-    return getCompactStatusText(panel);
+    const status = getCompactStatusText(panel);
+    const prefix = props.prefix?.() ?? "";
+    if (!prefix) return status;
+    return status ? `${prefix} · ${status}` : prefix;
   };
 
   // Always render the box. When used as the OpenCode `hint` prop, the slot
@@ -382,8 +438,20 @@ function SessionPromptRightWithCompactLine(props: {
 }) {
   const resource = useSessionStatusResource(props.api, () => props.sessionID);
   const panel = () => resource().compact();
+  const timerText = useSessionTimerText(
+    props.api,
+    () => props.sessionID,
+    () => resource().showSessionTimer(),
+  );
 
-  return <CompactStatusLine api={props.api} panel={panel} justifyContent="flex-end" />;
+  return (
+    <CompactStatusLine
+      api={props.api}
+      panel={panel}
+      prefix={timerText}
+      justifyContent="flex-end"
+    />
+  );
 }
 
 function HomeCompactStatusView(props: { api: TuiPluginApi }) {

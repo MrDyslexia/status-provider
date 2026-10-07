@@ -280,6 +280,7 @@ list — this covers the fields most people touch):
 | `toastDurationMs` | `number` | `9000` | How long a toast stays visible. |
 | `onlyCurrentModel` | `boolean` | `false` | If `true`, only show status for the current model. |
 | `showSessionTokens` | `boolean` | `true` | Show the session input/output token section when data is available. |
+| `showSessionTimer` | `boolean` | `true` | Show a session stopwatch (`HH:MM:SS`, elapsed since the session was created) on the right of the sidebar "Status" heading and in the session-prompt compact line. |
 | `tuiSidebarPanel.enabled` | `boolean` | `true` | Sidebar panel visibility when the TUI plugin is installed. |
 | `tuiCompactStatus.enabled` | `boolean` | `false` | Opt-in compact status text for TUI prompt/home surfaces. The session-prompt line always narrows to the current model's provider (with reset time) regardless of `onlyCurrentModel`; the home line still shows every provider. |
 | `anthropicBinaryPath` | `string` | `"claude"` | Path/command name for the local Claude CLI used by Anthropic probing. |

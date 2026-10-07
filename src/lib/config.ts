@@ -59,6 +59,7 @@ export const STATUS_PROVIDER_SETTING_SOURCE_KEYS = [
   "toastDurationMs",
   "onlyCurrentModel",
   "showSessionTokens",
+  "showSessionTimer",
   "tuiSidebarPanel.enabled",
   "tuiCompactStatus.enabled",
   "tuiCompactStatus.homeBottom",
@@ -157,6 +158,7 @@ type ValidatedStatusProviderPatch = {
   toastDurationMs?: number;
   onlyCurrentModel?: boolean;
   showSessionTokens?: boolean;
+  showSessionTimer?: boolean;
   tuiSidebarPanel?: TuiSidebarPanelPatch;
   tuiCompactStatus?: TuiCompactStatusPatch;
   layout?: LayoutPatch;
@@ -676,6 +678,13 @@ function extractValidatedStatusProviderPatch(
     patch.showSessionTokens = statusProviderConfig.showSessionTokens;
   }
 
+  if (
+    hasOwnKey(statusProviderConfig, "showSessionTimer") &&
+    typeof statusProviderConfig.showSessionTimer === "boolean"
+  ) {
+    patch.showSessionTimer = statusProviderConfig.showSessionTimer;
+  }
+
   if (hasOwnKey(statusProviderConfig, "tuiSidebarPanel")) {
     const tuiSidebarPanel = extractTuiSidebarPanelPatch(statusProviderConfig.tuiSidebarPanel);
     if (tuiSidebarPanel) {
@@ -867,6 +876,11 @@ function applyValidatedStatusProviderPatch(
   if (hasOwnKey(patch, "showSessionTokens")) {
     config.showSessionTokens = patch.showSessionTokens!;
     applySettingSource(settingSources, "showSessionTokens", sourcePath);
+  }
+
+  if (hasOwnKey(patch, "showSessionTimer")) {
+    config.showSessionTimer = patch.showSessionTimer!;
+    applySettingSource(settingSources, "showSessionTimer", sourcePath);
   }
 
   if (patch.tuiSidebarPanel) {

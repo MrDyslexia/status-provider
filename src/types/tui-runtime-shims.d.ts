@@ -109,6 +109,7 @@ declare module "@opencode-ai/plugin/tui" {
           | {
               model?: { id?: string; providerID?: string; variant?: string };
               agent?: string;
+              time?: { created?: number; updated?: number };
             }
           | undefined;
       };

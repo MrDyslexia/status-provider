@@ -82,6 +82,15 @@ describe("status runtime context", () => {
     } as unknown as StatusRuntimeClient;
   }
 
+  it("propagates diagnostic opt-in without session metadata", () => {
+    const context = createStatusProviderRuntimeContext({
+      client: createClient(),
+      config: { ...DEFAULT_CONFIG, anthropicDiagnosticLogging: true },
+      session: {},
+    });
+    expect(context.config.anthropicDiagnosticLogging).toBe(true);
+  });
+
   it("keeps workspace-root and config-root selection separate", () => {
     expect(
       resolveRuntimeContextRoots({

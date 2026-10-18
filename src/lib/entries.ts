@@ -124,6 +124,7 @@ export interface StatusProviderContext {
   config: {
     googleModels: string[];
     anthropicBinaryPath?: string;
+    anthropicDiagnosticLogging?: boolean;
     alibabaCodingPlanTier: "lite" | "pro";
     cursorPlan: CursorStatusPlan;
     cursorIncludedApiUsd?: number;

@@ -123,6 +123,8 @@ export interface StatusProviderConfig {
 
   /** Path or command name for the local Claude CLI used by Anthropic probing. */
   anthropicBinaryPath: string;
+  /** Opt-in privacy-safe local Anthropic quota diagnostics, independent of toast debug. */
+  anthropicDiagnosticLogging: boolean;
 
   googleModels: GoogleModelId[];
   alibabaCodingPlanTier: AlibabaCodingPlanTier;
@@ -206,6 +208,7 @@ export const DEFAULT_CONFIG: StatusProviderConfig = {
   toastAlignmentVariant: "left" as const,
 
   anthropicBinaryPath: "claude",
+  anthropicDiagnosticLogging: false,
 
   // If Google Antigravity is enabled, default to Claude only.
   googleModels: ["CLAUDE"],

@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdir, readdir, rm, writeFile } from "fs/promises";
 
 const TEST_RUNTIME_ROOT = "/tmp/status-provider-state-tests";
+const evidence = vi.hoisted(() => ({ log: vi.fn() }));
+vi.mock("../src/lib/anthropic-diagnostic-log.js", () => ({ logAnthropicDiagnostic: evidence.log }));
 
 vi.mock("../src/lib/opencode-runtime-paths.js", () => ({
   getOpencodeRuntimeDirs: () => ({
@@ -32,6 +34,7 @@ function createTestContext() {
 
 describe("status-state shared cache", () => {
   beforeEach(async () => {
+    evidence.log.mockClear();
     vi.restoreAllMocks();
     vi.resetModules();
     await rm(TEST_RUNTIME_ROOT, { recursive: true, force: true });
@@ -41,6 +44,113 @@ describe("status-state shared cache", () => {
     vi.restoreAllMocks();
     vi.resetModules();
     await rm(TEST_RUNTIME_ROOT, { recursive: true, force: true });
+  });
+
+  it("records disappearance, error TTL, recovery and Anthropic-only cache decisions", async () => {
+    const { fetchStatusProviderResult } = await import("../src/lib/status-state.js");
+    const ctx = createTestContext();
+    ctx.config.anthropicDiagnosticLogging = true;
+    const success = {
+      attempted: true,
+      entries: [{ name: "quota-canary", percentRemaining: 55 }],
+      errors: [],
+    };
+    const error = {
+      attempted: true,
+      entries: [],
+      errors: [{ label: "Claude", message: "error-canary" }],
+    };
+    const provider = {
+      id: "anthropic",
+      isAvailable: vi.fn(),
+      fetch: vi
+        .fn()
+        .mockResolvedValueOnce(success)
+        .mockResolvedValueOnce(error)
+        .mockResolvedValueOnce(success)
+        .mockResolvedValueOnce({ attempted: false, entries: [], errors: [] }),
+    };
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_800_000_000_000);
+    const fetch = () => fetchStatusProviderResult({ provider, ctx, ttlMs: 300_000 });
+    await fetch();
+    now.mockReturnValue(1_800_000_300_001);
+    expect((await fetch()).entries).toEqual([]);
+    await fetch();
+    expect(evidence.log).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({ outcome: "hit", remainingTtlMs: 300_000, hasData: false }),
+    );
+    now.mockReturnValue(1_800_000_600_002);
+    expect((await fetch()).entries).toEqual(success.entries);
+    now.mockReturnValue(1_800_000_900_003);
+    expect((await fetch()).attempted).toBe(false);
+    const outcomes = evidence.log.mock.calls.map(([, event]) => event.outcome);
+    expect(outcomes).toEqual(
+      expect.arrayContaining(["miss", "expiry", "error", "recovery", "unattempted-deletion"]),
+    );
+    expect(JSON.stringify(evidence.log.mock.calls)).not.toMatch(
+      /quota-canary|error-canary|anthropicBinaryPath|session/,
+    );
+    evidence.log.mockClear();
+    await fetchStatusProviderResult({
+      provider: { ...provider, id: "synthetic", fetch: vi.fn().mockResolvedValue(success) },
+      ctx,
+      ttlMs: 300_000,
+    });
+    expect(evidence.log).not.toHaveBeenCalled();
+  });
+
+  it("records rate-limit stale fallback, bypass and in-flight dedup without changing results", async () => {
+    const { fetchStatusProviderResult } = await import("../src/lib/status-state.js");
+    const ctx = createTestContext();
+    ctx.config.anthropicDiagnosticLogging = true;
+    const success = {
+      attempted: true,
+      entries: [{ name: "Claude", percentRemaining: 55 }],
+      errors: [],
+    };
+    const provider = {
+      id: "anthropic",
+      isAvailable: vi.fn(),
+      fetch: vi
+        .fn()
+        .mockResolvedValueOnce(success)
+        .mockResolvedValueOnce({
+          attempted: true,
+          entries: [],
+          errors: [],
+          rateLimitedUntil: Date.now() + 300_000,
+        }),
+    };
+    await fetchStatusProviderResult({ provider, ctx, ttlMs: 0 });
+    expect((await fetchStatusProviderResult({ provider, ctx, ttlMs: 0 })).entries).toEqual(
+      success.entries,
+    );
+    expect(evidence.log).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({ outcome: "stale-fallback" }),
+    );
+    provider.fetch.mockResolvedValue(success);
+    await fetchStatusProviderResult({ provider, ctx, ttlMs: 0, bypassCache: true });
+    expect(evidence.log).toHaveBeenCalledWith(true, expect.objectContaining({ outcome: "bypass" }));
+    let release!: (value: typeof success) => void;
+    provider.fetch.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const first = fetchStatusProviderResult({ provider, ctx, ttlMs: 0 });
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    const second = fetchStatusProviderResult({ provider, ctx, ttlMs: 0 });
+    await vi.waitFor(() =>
+      expect(evidence.log).toHaveBeenCalledWith(
+        true,
+        expect.objectContaining({ outcome: "dedup" }),
+      ),
+    );
+    release(success);
+    await Promise.all([first, second]);
   });
 
   it("builds a provider cache key that ignores formatStyle-like extras", async () => {
@@ -60,9 +170,8 @@ describe("status-state shared cache", () => {
   });
 
   it("returns cache-owned clones for repeated non-live provider reads", async () => {
-    const { __resetStatusStateForTests, fetchStatusProviderResult } = await import(
-      "../src/lib/status-state.js"
-    );
+    const { __resetStatusStateForTests, fetchStatusProviderResult } =
+      await import("../src/lib/status-state.js");
     __resetStatusStateForTests();
 
     const provider = {
@@ -80,11 +189,11 @@ describe("status-state shared cache", () => {
             resetTimeIso: "2026-04-21T18:00:00.000Z",
           },
         ],
-      errors: [],
-      presentation: {
-        singleWindowShowRight: true,
-      },
-    }),
+        errors: [],
+        presentation: {
+          singleWindowShowRight: true,
+        },
+      }),
     } as any;
 
     const first = await fetchStatusProviderResult({
@@ -271,7 +380,11 @@ describe("status-state shared cache", () => {
         key,
         providerId: provider.id,
         timestamp: Date.now(),
-        result: { attempted: true, entries: [{ name: "Synthetic", percentRemaining: 10 }], errors: [] },
+        result: {
+          attempted: true,
+          entries: [{ name: "Synthetic", percentRemaining: 10 }],
+          errors: [],
+        },
       }),
       "utf-8",
     );
@@ -308,7 +421,11 @@ describe("status-state shared cache", () => {
         key,
         providerId: provider.id,
         timestamp: Date.now(),
-        result: { attempted: true, entries: [{ name: "Synthetic", percentRemaining: 10 }], errors: [] },
+        result: {
+          attempted: true,
+          entries: [{ name: "Synthetic", percentRemaining: 10 }],
+          errors: [],
+        },
       }),
       "utf-8",
     );
@@ -321,9 +438,8 @@ describe("status-state shared cache", () => {
   });
 
   it("bypasses persistence entirely for live-local providers", async () => {
-    const { __resetStatusStateForTests, fetchStatusProviderResult } = await import(
-      "../src/lib/status-state.js"
-    );
+    const { __resetStatusStateForTests, fetchStatusProviderResult } =
+      await import("../src/lib/status-state.js");
     __resetStatusStateForTests();
 
     const provider = {
@@ -354,9 +470,8 @@ describe("status-state shared cache", () => {
   it("re-fetches a retryable auth-error result well before the full TTL elapses", async () => {
     vi.useFakeTimers();
     try {
-      const { __resetStatusStateForTests, fetchStatusProviderResult } = await import(
-        "../src/lib/status-state.js"
-      );
+      const { __resetStatusStateForTests, fetchStatusProviderResult } =
+        await import("../src/lib/status-state.js");
       __resetStatusStateForTests();
 
       const provider = {
@@ -386,9 +501,8 @@ describe("status-state shared cache", () => {
   it("serves a non-retryable error from cache for the full ttlMs like before", async () => {
     vi.useFakeTimers();
     try {
-      const { __resetStatusStateForTests, fetchStatusProviderResult } = await import(
-        "../src/lib/status-state.js"
-      );
+      const { __resetStatusStateForTests, fetchStatusProviderResult } =
+        await import("../src/lib/status-state.js");
       __resetStatusStateForTests();
 
       const provider = {

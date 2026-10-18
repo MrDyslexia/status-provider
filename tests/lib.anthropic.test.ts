@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { execFile } from "child_process";
-import { readFile } from "fs/promises";
+import { readFile, stat } from "fs/promises";
 
 import { fetchWithTimeout } from "../src/lib/http.js";
+import { logAnthropicDiagnostic } from "../src/lib/anthropic-diagnostic-log.js";
+vi.mock("../src/lib/anthropic-diagnostic-log.js", () => ({ logAnthropicDiagnostic: vi.fn() }));
 import {
   buildClaudeCommandInvocation,
   clearAnthropicDiagnosticsCacheForTests,
@@ -12,10 +14,7 @@ import {
   parseUsageResponse,
   queryAnthropicStatus,
 } from "../src/lib/anthropic.js";
-import {
-  clearReadAuthFileCacheForTests,
-  readAuthFileCached,
-} from "../src/lib/opencode-auth.js";
+import { clearReadAuthFileCacheForTests, readAuthFileCached } from "../src/lib/opencode-auth.js";
 import {
   parseAnthropicOAuthCode,
   refreshAnthropicAuth,
@@ -114,6 +113,8 @@ function mockInvalidJsonResponse(status = 200): Response {
 }
 
 afterEach(() => {
+  vi.mocked(logAnthropicDiagnostic).mockClear();
+  vi.mocked(stat).mockReset().mockRejectedValue(new Error("ENOENT: not found"));
   execFileMock.mockReset();
   readFileMock.mockReset();
   fetchWithTimeoutMock.mockReset();
@@ -189,6 +190,149 @@ describe("parseUsageResponse", () => {
   });
 });
 
+describe("originating diagnostic branches", () => {
+  function configureOAuth() {
+    setProcessPlatform("linux");
+    mockExecSequence([{ stdout: "2.1.0" }, { stdout: '{"authenticated":true}' }]);
+    vi.mocked(readAuthFileCached).mockResolvedValue({
+      anthropic: {
+        type: "oauth",
+        access: "token-canary",
+        refresh: "refresh-canary",
+        expires: Date.now() + 60_000,
+      },
+    });
+  }
+  function outcomes(stage: string) {
+    return vi
+      .mocked(logAnthropicDiagnostic)
+      .mock.calls.filter(([enabled, event]) => enabled && event.stage === stage)
+      .map(([, event]) => event.outcome);
+  }
+  it.each([
+    [401, "unauthorized"],
+    [403, "forbidden"],
+    [429, "rate-limited"],
+    [503, "server-error"],
+    [400, "http-error"],
+  ])("records HTTP %s without response bodies or credentials", async (status, outcome) => {
+    configureOAuth();
+    fetchWithTimeoutMock.mockResolvedValue(mockJsonResponse({ error: "body-canary" }, status));
+    const result = await queryAnthropicStatus({ anthropicDiagnosticLogging: true });
+    expect(result?.success).toBe(false);
+    expect(outcomes("http")).toContain(outcome);
+    const evidence = JSON.stringify(vi.mocked(logAnthropicDiagnostic).mock.calls);
+    expect(evidence).not.toMatch(/token-canary|refresh-canary|body-canary|auth\.json|https:/);
+  });
+  it.each([
+    [new Error("network-canary"), "network"],
+    [new Error("Request timeout after 5s"), "timeout"],
+  ])("classifies transport failure without recording raw errors", async (error, outcome) => {
+    configureOAuth();
+    fetchWithTimeoutMock.mockRejectedValue(error);
+    await queryAnthropicStatus({ anthropicDiagnosticLogging: true });
+    expect(outcomes("http")).toContain(outcome);
+    expect(JSON.stringify(vi.mocked(logAnthropicDiagnostic).mock.calls)).not.toContain(
+      error.message,
+    );
+  });
+  it.each([
+    [true, "parse-error"],
+    [false, "response-shape"],
+  ])("distinguishes malformed JSON from wrong shape (%s)", async (invalid, outcome) => {
+    configureOAuth();
+    fetchWithTimeoutMock.mockResolvedValue(
+      invalid ? mockInvalidJsonResponse() : mockJsonResponse({ secret: "shape-canary" }),
+    );
+    await queryAnthropicStatus({ anthropicDiagnosticLogging: true });
+    expect(outcomes("http")).toContain(outcome);
+  });
+  it("records a rotated-token reread and successful one-time retry", async () => {
+    configureOAuth();
+    const oldAuth = {
+      anthropic: {
+        type: "oauth" as const,
+        access: "old-canary",
+        refresh: "refresh",
+        expires: Date.now() + 60_000,
+      },
+    };
+    const freshAuth = { anthropic: { ...oldAuth.anthropic, access: "new-canary" } };
+    vi.mocked(readAuthFileCached)
+      .mockResolvedValueOnce(oldAuth)
+      .mockResolvedValueOnce(oldAuth)
+      .mockResolvedValueOnce(freshAuth);
+    fetchWithTimeoutMock
+      .mockResolvedValueOnce(mockJsonResponse({}, 401))
+      .mockResolvedValueOnce(
+        mockJsonResponse({ five_hour: { utilization: 1 }, seven_day: { utilization: 2 } }),
+      );
+    expect((await queryAnthropicStatus({ anthropicDiagnosticLogging: true }))?.success).toBe(true);
+    expect(outcomes("rotated-token")).toEqual(["rotated", "success"]);
+    expect(fetchWithTimeoutMock).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(vi.mocked(logAnthropicDiagnostic).mock.calls)).not.toMatch(
+      /old-canary|new-canary/,
+    );
+  });
+  it("records five-second cache hits without extra HTTP calls", async () => {
+    configureOAuth();
+    fetchWithTimeoutMock.mockResolvedValue(
+      mockJsonResponse({ five_hour: { utilization: 1 }, seven_day: { utilization: 2 } }),
+    );
+    await queryAnthropicStatus({ anthropicDiagnosticLogging: true });
+    await queryAnthropicStatus({ anthropicDiagnosticLogging: true });
+    expect(outcomes("diagnostics-cache")).toEqual(["miss", "hit"]);
+    expect(fetchWithTimeoutMock).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    [false, "auth-expired"],
+    [true, "auth-refreshing"],
+  ])("records actual expired versus refreshing auth (%s)", async (refreshing, outcome) => {
+    configureOAuth();
+    vi.mocked(readAuthFileCached).mockResolvedValue({
+      anthropic: {
+        type: "oauth",
+        access: "auth-canary",
+        refresh: "refresh",
+        expires: Date.now() - 1_000,
+      },
+    });
+    vi.mocked(stat).mockResolvedValue({ mtimeMs: Date.now() - (refreshing ? 0 : 60_000) } as any);
+    const result = await queryAnthropicStatus({ anthropicDiagnosticLogging: true });
+    expect(result).toMatchObject({ success: false, authExpiredUntil: expect.any(Number) });
+    expect(outcomes("credentials")).toContain(outcome);
+    expect(fetchWithTimeoutMock).not.toHaveBeenCalled();
+  });
+  it("records unavailable credentials and fallback source categories only", async () => {
+    setProcessPlatform("darwin");
+    mockExecSequence([
+      { stdout: "2.1.0" },
+      { stdout: '{"authenticated":true}' },
+      { code: 1, stderr: "keychain-canary" },
+    ]);
+    readFileMock.mockRejectedValue(new Error("credential-path-canary"));
+    const result = await queryAnthropicStatus({ anthropicDiagnosticLogging: true });
+    expect(result?.success).toBe(false);
+    expect(outcomes("credentials")).toContain("credential-unavailable");
+    const events = vi
+      .mocked(logAnthropicDiagnostic)
+      .mock.calls.filter(([enabled]) => enabled)
+      .map(([, event]) => event);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ stage: "credentials", source: "keychain", outcome: "not-found" }),
+        expect.objectContaining({ stage: "credentials", source: "opencode", outcome: "not-found" }),
+        expect.objectContaining({
+          stage: "credentials",
+          source: "claude-file",
+          outcome: "unavailable",
+        }),
+      ]),
+    );
+    expect(JSON.stringify(events)).not.toMatch(/canary|\.credentials|auth\.json/);
+  });
+});
+
 describe("Claude CLI diagnostics", () => {
   it("builds a Windows-safe Claude CLI invocation for shim-based installs", () => {
     const invocation = buildClaudeCommandInvocation(
@@ -203,7 +347,7 @@ describe("Claude CLI diagnostics", () => {
         "/d",
         "/s",
         "/c",
-        "\"C:\\Users\\alice\\AppData\\Roaming\\npm\\claude.cmd\" \"auth\" \"status\" \"--json\"",
+        '"C:\\Users\\alice\\AppData\\Roaming\\npm\\claude.cmd" "auth" "status" "--json"',
       ],
       display: "C:\\Users\\alice\\AppData\\Roaming\\npm\\claude.cmd auth status --json",
     });
@@ -217,7 +361,7 @@ describe("Claude CLI diagnostics", () => {
 
     expect(invocation).toEqual({
       file: "C:\\Windows\\System32\\cmd.exe",
-      args: ["/d", "/s", "/c", "\"claude.exe\" \"--version\""],
+      args: ["/d", "/s", "/c", '"claude.exe" "--version"'],
       display: "claude.exe --version",
     });
   });
@@ -315,7 +459,7 @@ describe("Claude CLI diagnostics", () => {
     });
 
     expect(diagnostics.checkedCommands).toEqual([
-      "\"/Applications/Claude Code.app/Contents/MacOS/claude\" --version",
+      '"/Applications/Claude Code.app/Contents/MacOS/claude" --version',
     ]);
     expect(diagnostics.message).toContain("/Applications/Claude Code.app/Contents/MacOS/claude");
   });

@@ -44,6 +44,7 @@ export const STATUS_PROVIDER_SETTING_SOURCE_KEYS = [
   "colorVariant",
   "alignmentVariant",
   "anthropicBinaryPath",
+  "anthropicDiagnosticLogging",
   "googleModels",
   "alibabaCodingPlanTier",
   "cursorPlan",
@@ -144,6 +145,7 @@ type ValidatedStatusProviderPatch = {
   colorVariant?: StatusProviderConfig["colorVariant"];
   alignmentVariant?: StatusProviderConfig["alignmentVariant"];
   anthropicBinaryPath?: string;
+  anthropicDiagnosticLogging?: boolean;
   googleModels?: GoogleModelId[];
   alibabaCodingPlanTier?: StatusProviderConfig["alibabaCodingPlanTier"];
   cursorPlan?: CursorStatusPlan;
@@ -196,9 +198,7 @@ function isValidGoogleModelId(id: unknown): id is GoogleModelId {
 }
 
 function isValidCursorStatusPlan(plan: unknown): plan is CursorStatusPlan {
-  return (
-    typeof plan === "string" && ["none", "pro", "pro-plus", "ultra"].includes(plan)
-  );
+  return typeof plan === "string" && ["none", "pro", "pro-plus", "ultra"].includes(plan);
 }
 
 function isValidPricingSnapshotSource(source: unknown): source is PricingSnapshotSource {
@@ -217,7 +217,9 @@ function isValidTextVariant(value: unknown): value is StatusProviderConfig["text
   return value === "default" || value === "minimal" || value === "box" || value === "emoji";
 }
 
-function isValidProviderNameVariant(value: unknown): value is StatusProviderConfig["providerNameVariant"] {
+function isValidProviderNameVariant(
+  value: unknown,
+): value is StatusProviderConfig["providerNameVariant"] {
   return value === "full" || value === "short" || value === "icon";
 }
 
@@ -229,7 +231,9 @@ function isValidColorVariant(value: unknown): value is StatusProviderConfig["col
   return value === "auto" || value === "none";
 }
 
-function isValidAlignmentVariant(value: unknown): value is StatusProviderConfig["alignmentVariant"] {
+function isValidAlignmentVariant(
+  value: unknown,
+): value is StatusProviderConfig["alignmentVariant"] {
   return value === "left" || value === "right";
 }
 
@@ -249,10 +253,16 @@ function isValidCursorBillingCycleStartDay(value: unknown): value is number {
 
 const VALID_OPENCODE_GO_WINDOWS = ["rolling", "weekly", "monthly"] as const;
 
-function isValidOpenCodeGoWindows(value: unknown): value is Array<"rolling" | "weekly" | "monthly"> {
+function isValidOpenCodeGoWindows(
+  value: unknown,
+): value is Array<"rolling" | "weekly" | "monthly"> {
   if (!Array.isArray(value)) return false;
   if (value.length === 0) return false;
-  return value.every((v) => typeof v === "string" && VALID_OPENCODE_GO_WINDOWS.includes(v as typeof VALID_OPENCODE_GO_WINDOWS[number]));
+  return value.every(
+    (v) =>
+      typeof v === "string" &&
+      VALID_OPENCODE_GO_WINDOWS.includes(v as (typeof VALID_OPENCODE_GO_WINDOWS)[number]),
+  );
 }
 
 function normalizeOptionalString(value: unknown): string | undefined {
@@ -328,7 +338,7 @@ function normalizeEnabledProviders(value: unknown): NormalizedEnabledProviders {
   if (!Array.isArray(value)) {
     return {
       value: [],
-      issues: ["expected \"auto\" or an array of provider ids"],
+      issues: ['expected "auto" or an array of provider ids'],
       invalidEmpty: true,
     };
   }
@@ -493,7 +503,10 @@ function extractValidatedStatusProviderPatch(
 ): ValidatedStatusProviderPatch {
   const patch: ValidatedStatusProviderPatch = {};
 
-  if (hasOwnKey(statusProviderConfig, "enabled") && typeof statusProviderConfig.enabled === "boolean") {
+  if (
+    hasOwnKey(statusProviderConfig, "enabled") &&
+    typeof statusProviderConfig.enabled === "boolean"
+  ) {
     patch.enabled = statusProviderConfig.enabled;
   }
 
@@ -504,7 +517,9 @@ function extractValidatedStatusProviderPatch(
     patch.enableToast = statusProviderConfig.enableToast;
   }
 
-  const formatStyle = getConfiguredFormatStyle(statusProviderConfig as Partial<StatusProviderConfig>);
+  const formatStyle = getConfiguredFormatStyle(
+    statusProviderConfig as Partial<StatusProviderConfig>,
+  );
   if (formatStyle) {
     patch.formatStyle = formatStyle;
   }
@@ -516,7 +531,10 @@ function extractValidatedStatusProviderPatch(
     patch.percentDisplayMode = statusProviderConfig.percentDisplayMode;
   }
 
-  if (hasOwnKey(statusProviderConfig, "minIntervalMs") && isPositiveNumber(statusProviderConfig.minIntervalMs)) {
+  if (
+    hasOwnKey(statusProviderConfig, "minIntervalMs") &&
+    isPositiveNumber(statusProviderConfig.minIntervalMs)
+  ) {
     patch.minIntervalMs = statusProviderConfig.minIntervalMs;
   }
 
@@ -553,7 +571,10 @@ function extractValidatedStatusProviderPatch(
     }
   }
 
-  if (hasOwnKey(statusProviderConfig, "textVariant") && isValidTextVariant(statusProviderConfig.textVariant)) {
+  if (
+    hasOwnKey(statusProviderConfig, "textVariant") &&
+    isValidTextVariant(statusProviderConfig.textVariant)
+  ) {
     patch.textVariant = statusProviderConfig.textVariant;
   }
 
@@ -564,11 +585,17 @@ function extractValidatedStatusProviderPatch(
     patch.providerNameVariant = statusProviderConfig.providerNameVariant;
   }
 
-  if (hasOwnKey(statusProviderConfig, "percentVariant") && isValidPercentVariant(statusProviderConfig.percentVariant)) {
+  if (
+    hasOwnKey(statusProviderConfig, "percentVariant") &&
+    isValidPercentVariant(statusProviderConfig.percentVariant)
+  ) {
     patch.percentVariant = statusProviderConfig.percentVariant;
   }
 
-  if (hasOwnKey(statusProviderConfig, "colorVariant") && isValidColorVariant(statusProviderConfig.colorVariant)) {
+  if (
+    hasOwnKey(statusProviderConfig, "colorVariant") &&
+    isValidColorVariant(statusProviderConfig.colorVariant)
+  ) {
     patch.colorVariant = statusProviderConfig.colorVariant;
   }
 
@@ -586,6 +613,13 @@ function extractValidatedStatusProviderPatch(
     }
   }
 
+  if (
+    hasOwnKey(statusProviderConfig, "anthropicDiagnosticLogging") &&
+    typeof statusProviderConfig.anthropicDiagnosticLogging === "boolean"
+  ) {
+    patch.anthropicDiagnosticLogging = statusProviderConfig.anthropicDiagnosticLogging;
+  }
+
   if (hasOwnKey(statusProviderConfig, "googleModels")) {
     const googleModels = normalizeGoogleModels(statusProviderConfig.googleModels);
     if (googleModels !== undefined) {
@@ -600,7 +634,10 @@ function extractValidatedStatusProviderPatch(
     patch.alibabaCodingPlanTier = statusProviderConfig.alibabaCodingPlanTier;
   }
 
-  if (hasOwnKey(statusProviderConfig, "cursorPlan") && isValidCursorStatusPlan(statusProviderConfig.cursorPlan)) {
+  if (
+    hasOwnKey(statusProviderConfig, "cursorPlan") &&
+    isValidCursorStatusPlan(statusProviderConfig.cursorPlan)
+  ) {
     patch.cursorPlan = statusProviderConfig.cursorPlan;
   }
 
@@ -632,7 +669,10 @@ function extractValidatedStatusProviderPatch(
     }
   }
 
-  if (hasOwnKey(statusProviderConfig, "showOnIdle") && typeof statusProviderConfig.showOnIdle === "boolean") {
+  if (
+    hasOwnKey(statusProviderConfig, "showOnIdle") &&
+    typeof statusProviderConfig.showOnIdle === "boolean"
+  ) {
     patch.showOnIdle = statusProviderConfig.showOnIdle;
   }
 
@@ -799,6 +839,11 @@ function applyValidatedStatusProviderPatch(
   if (hasOwnKey(patch, "anthropicBinaryPath")) {
     config.anthropicBinaryPath = patch.anthropicBinaryPath!;
     applySettingSource(settingSources, "anthropicBinaryPath", sourcePath);
+  }
+
+  if (hasOwnKey(patch, "anthropicDiagnosticLogging")) {
+    config.anthropicDiagnosticLogging = patch.anthropicDiagnosticLogging!;
+    applySettingSource(settingSources, "anthropicDiagnosticLogging", sourcePath);
   }
 
   if (hasOwnKey(patch, "googleModels")) {
@@ -1029,7 +1074,8 @@ export async function loadConfig(
     networkSettingSources: Record<string, string>;
     configIssues: LoadConfigIssue[];
   }> {
-    const configRootDir = options?.configRootDir ?? getEffectiveConfigRoot(options?.cwd ?? process.cwd());
+    const configRootDir =
+      options?.configRootDir ?? getEffectiveConfigRoot(options?.cwd ?? process.cwd());
     const { configDirs } = getOpencodeRuntimeDirCandidates();
     const config = cloneDefaultConfig();
     const usedPaths: string[] = [];

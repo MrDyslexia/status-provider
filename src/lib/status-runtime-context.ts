@@ -87,9 +87,7 @@ export async function resolveStatusRuntimeContext(
   };
 }
 
-export function createStatusRuntimeRequestContext(
-  runtime: Pick<StatusRuntimeContext, "session">,
-): {
+export function createStatusRuntimeRequestContext(runtime: Pick<StatusRuntimeContext, "session">): {
   sessionID?: string;
   sessionMeta?: StatusSessionModelContext;
 } {
@@ -108,6 +106,7 @@ export function createStatusProviderRuntimeContext(
     config: {
       googleModels: runtime.config.googleModels,
       anthropicBinaryPath: runtime.config.anthropicBinaryPath,
+      anthropicDiagnosticLogging: runtime.config.anthropicDiagnosticLogging,
       alibabaCodingPlanTier: runtime.config.alibabaCodingPlanTier,
       cursorPlan: runtime.config.cursorPlan,
       cursorIncludedApiUsd: runtime.config.cursorIncludedApiUsd,
@@ -117,9 +116,7 @@ export function createStatusProviderRuntimeContext(
       requestTimeoutMsConfigured: Boolean(runtime.configMeta?.settingSources.requestTimeoutMs),
       onlyCurrentModel: runtime.config.onlyCurrentModel,
       enabledProviders:
-        runtime.config.enabledProviders === "auto"
-          ? "auto"
-          : [...runtime.config.enabledProviders],
+        runtime.config.enabledProviders === "auto" ? "auto" : [...runtime.config.enabledProviders],
       currentModel: runtime.session.sessionMeta?.modelID,
       currentProviderID: runtime.session.sessionMeta?.providerID,
     },

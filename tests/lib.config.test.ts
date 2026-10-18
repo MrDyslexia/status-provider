@@ -64,6 +64,24 @@ describe("loadConfig", () => {
     return { config, meta };
   }
 
+  it("requires explicit boolean opt-in for Anthropic logging independently of debug", async () => {
+    expect((await loadSdkConfig({ debug: true })).config.anthropicDiagnosticLogging).toBe(false);
+    const enabled = await loadSdkConfig({ anthropicDiagnosticLogging: true });
+    expect(enabled.config.anthropicDiagnosticLogging).toBe(true);
+    expect(enabled.config.debug).toBe(false);
+    expect(enabled.meta.settingSources.anthropicDiagnosticLogging).toBe("client.config.get");
+    expect(enabled.meta.networkSettingSources).toEqual({});
+    for (const invalid of ["true", 1, {}, null]) {
+      const out = await loadSdkConfig({ anthropicDiagnosticLogging: invalid });
+      expect(out.config.anthropicDiagnosticLogging).toBe(false);
+      expect(out.meta.settingSources).not.toHaveProperty("anthropicDiagnosticLogging");
+    }
+    expect(
+      (await loadSdkConfig({ anthropicDiagnosticLogging: false })).config
+        .anthropicDiagnosticLogging,
+    ).toBe(false);
+  });
+
   it("defaults TUI sidebar panel config and accepts validated nested overrides", async () => {
     const defaults = await loadSdkConfig({});
     expect(defaults.config.tuiSidebarPanel).toEqual(DEFAULT_CONFIG.tuiSidebarPanel);
@@ -430,9 +448,7 @@ describe("loadConfig", () => {
       `${jsonPath} (status-provider/config.json)`,
       `${jsoncPath} (status-provider/config.json)`,
     ]);
-    expect(meta.settingSources.enabledProviders).toBe(
-      `${jsonPath} (status-provider/config.json)`,
-    );
+    expect(meta.settingSources.enabledProviders).toBe(`${jsonPath} (status-provider/config.json)`);
     expect(meta.configIssues).toEqual([
       {
         path: `${jsoncPath} (status-provider/config.json)`,

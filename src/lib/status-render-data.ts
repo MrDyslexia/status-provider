@@ -105,6 +105,7 @@ function buildStatusProviderContext(params: {
     config: {
       googleModels: config.googleModels,
       anthropicBinaryPath: config.anthropicBinaryPath,
+      anthropicDiagnosticLogging: config.anthropicDiagnosticLogging,
       alibabaCodingPlanTier: config.alibabaCodingPlanTier,
       cursorPlan: config.cursorPlan,
       cursorIncludedApiUsd: config.cursorIncludedApiUsd,

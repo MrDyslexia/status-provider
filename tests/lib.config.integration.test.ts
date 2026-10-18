@@ -67,6 +67,15 @@ describe("loadConfig integration runtime-path resolution", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it("tracks workspace opt-out provenance over global diagnostic opt-in", async () => {
+    writeStatusConfig(join(xdgConfigHome, "opencode"), { anthropicDiagnosticLogging: true });
+    writeStatusConfig(workspaceDir, { anthropicDiagnosticLogging: false });
+    const meta = createLoadConfigMeta();
+    const config = await loadConfig(undefined, meta, { cwd: workspaceDir });
+    expect(config.anthropicDiagnosticLogging).toBe(false);
+    expect(meta.settingSources.anthropicDiagnosticLogging).toBe(statusConfigSource(workspaceDir));
+  });
+
   it("uses real runtime dirs as defaults and explicit cwd config as workspace overrides", async () => {
     const env = {
       ...process.env,
@@ -108,9 +117,9 @@ describe("loadConfig integration runtime-path resolution", () => {
     expect(cfg.onlyCurrentModel).toBe(true);
 
     expect(meta.source).toBe("files");
-    expect(meta.paths.some((path) => configDirs.some((dir) => path === statusConfigSource(dir)))).toBe(
-      true,
-    );
+    expect(
+      meta.paths.some((path) => configDirs.some((dir) => path === statusConfigSource(dir))),
+    ).toBe(true);
     expect(meta.paths).toContain(statusConfigSource(workspaceDir));
     expect(meta.paths).not.toContain(statusConfigSource(nestedDir));
     expect(meta.workspaceConfigPaths).toEqual([statusConfigSource(workspaceDir)]);
@@ -119,24 +128,16 @@ describe("loadConfig integration runtime-path resolution", () => {
         configDirs.some((dir) => path === statusConfigSource(dir)),
       ),
     ).toBe(true);
-    expect(meta.settingSources.enabled).toBe(
-      statusConfigSource(workspaceDir),
-    );
-    expect(meta.settingSources.enabledProviders).toBe(
-      statusConfigSource(workspaceDir),
-    );
+    expect(meta.settingSources.enabled).toBe(statusConfigSource(workspaceDir));
+    expect(meta.settingSources.enabledProviders).toBe(statusConfigSource(workspaceDir));
     expect(
       configDirs.some(
-        (dir) =>
-          meta.settingSources["pricingSnapshot.source"] ===
-          statusConfigSource(dir),
+        (dir) => meta.settingSources["pricingSnapshot.source"] === statusConfigSource(dir),
       ),
     ).toBe(true);
     expect(
       configDirs.some(
-        (dir) =>
-          meta.settingSources["pricingSnapshot.autoRefresh"] ===
-          statusConfigSource(dir),
+        (dir) => meta.settingSources["pricingSnapshot.autoRefresh"] === statusConfigSource(dir),
       ),
     ).toBe(true);
   });
@@ -154,12 +155,8 @@ describe("loadConfig integration runtime-path resolution", () => {
     expect(meta.globalConfigPaths).toEqual([]);
     expect(meta.workspaceConfigPaths).toEqual([statusConfigSource(overlappingRoot)]);
     expect(meta.paths).toEqual(meta.workspaceConfigPaths);
-    expect(meta.settingSources.enabled).toBe(
-      statusConfigSource(overlappingRoot),
-    );
-    expect(meta.settingSources.minIntervalMs).toBe(
-      statusConfigSource(overlappingRoot),
-    );
+    expect(meta.settingSources.enabled).toBe(statusConfigSource(overlappingRoot));
+    expect(meta.settingSources.minIntervalMs).toBe(statusConfigSource(overlappingRoot));
   });
 
   it("uses the provided configRootDir to pick the workspace override layer over shared global defaults", async () => {
@@ -200,7 +197,9 @@ describe("loadConfig integration runtime-path resolution", () => {
     });
 
     const workspaceMeta = createLoadConfigMeta();
-    const workspaceCfg = await loadConfig(undefined, workspaceMeta, { configRootDir: workspaceDir });
+    const workspaceCfg = await loadConfig(undefined, workspaceMeta, {
+      configRootDir: workspaceDir,
+    });
 
     const nestedMeta = createLoadConfigMeta();
     const nestedCfg = await loadConfig(undefined, nestedMeta, { configRootDir: nestedDir });
@@ -226,17 +225,9 @@ describe("loadConfig integration runtime-path resolution", () => {
           nestedMeta.globalConfigPaths.includes(statusConfigSource(dir)),
       ),
     ).toBe(true);
-    expect(workspaceMeta.settingSources.enabled).toBe(
-      statusConfigSource(workspaceDir),
-    );
-    expect(nestedMeta.settingSources.enabled).toBe(
-      statusConfigSource(nestedDir),
-    );
-    expect(workspaceMeta.settingSources.minIntervalMs).toBe(
-      statusConfigSource(workspaceDir),
-    );
-    expect(nestedMeta.settingSources.minIntervalMs).toBe(
-      statusConfigSource(nestedDir),
-    );
+    expect(workspaceMeta.settingSources.enabled).toBe(statusConfigSource(workspaceDir));
+    expect(nestedMeta.settingSources.enabled).toBe(statusConfigSource(nestedDir));
+    expect(workspaceMeta.settingSources.minIntervalMs).toBe(statusConfigSource(workspaceDir));
+    expect(nestedMeta.settingSources.minIntervalMs).toBe(statusConfigSource(nestedDir));
   });
 });

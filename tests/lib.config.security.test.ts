@@ -66,6 +66,16 @@ describe("loadConfig layered precedence", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it("does not let a malformed diagnostic flag override a validated opt-in", async () => {
+    const globalDir = join(xdgConfigHome, "opencode");
+    writeStatusConfig(globalDir, { anthropicDiagnosticLogging: true });
+    writeStatusConfig(workspaceDir, { anthropicDiagnosticLogging: "true" });
+    const meta = createLoadConfigMeta();
+    const config = await loadConfig(undefined, meta, { cwd: workspaceDir });
+    expect(config.anthropicDiagnosticLogging).toBe(true);
+    expect(meta.settingSources.anthropicDiagnosticLogging).toBe(statusConfigSource(globalDir));
+  });
+
   it("lets workspace ordinary settings override global defaults while file-backed config still blocks sdk fallback", async () => {
     writeStatusConfig(join(xdgConfigHome, "opencode"), {
       enabled: false,
@@ -194,12 +204,8 @@ describe("loadConfig layered precedence", () => {
     expect(meta.settingSources["layout.maxWidth"]).toBe(
       statusConfigSource(join(xdgConfigHome, "opencode")),
     );
-    expect(meta.settingSources["layout.narrowAt"]).toBe(
-      statusConfigSource(workspaceDir),
-    );
-    expect(meta.settingSources["layout.tinyAt"]).toBe(
-      statusConfigSource(workspaceDir),
-    );
+    expect(meta.settingSources["layout.narrowAt"]).toBe(statusConfigSource(workspaceDir));
+    expect(meta.settingSources["layout.tinyAt"]).toBe(statusConfigSource(workspaceDir));
   });
 
   it("merges tuiSidebarPanel enabled per layer and ignores invalid workspace fields", async () => {
@@ -291,36 +297,16 @@ describe("loadConfig layered precedence", () => {
     expect(cfg.formatStyle).toBe("allWindows");
     expect(cfg.layout).toEqual({ maxWidth: 64, narrowAt: 35, tinyAt: 32 });
     const globalStatusConfigSource = statusConfigSource(join(xdgConfigHome, "opencode"));
-    expect(meta.settingSources.enabledProviders).toBe(
-      globalStatusConfigSource,
-    );
-    expect(meta.settingSources.anthropicBinaryPath).toBe(
-      globalStatusConfigSource,
-    );
-    expect(meta.settingSources.googleModels).toBe(
-      globalStatusConfigSource,
-    );
-    expect(meta.settingSources.cursorIncludedApiUsd).toBe(
-      globalStatusConfigSource,
-    );
-    expect(meta.settingSources.cursorBillingCycleStartDay).toBe(
-      globalStatusConfigSource,
-    );
-    expect(meta.settingSources["pricingSnapshot.source"]).toBe(
-      globalStatusConfigSource,
-    );
-    expect(meta.settingSources["pricingSnapshot.autoRefresh"]).toBe(
-      globalStatusConfigSource,
-    );
-    expect(meta.settingSources.formatStyle).toBe(
-      globalStatusConfigSource,
-    );
-    expect(meta.settingSources["layout.maxWidth"]).toBe(
-      globalStatusConfigSource,
-    );
-    expect(meta.settingSources["layout.narrowAt"]).toBe(
-      statusConfigSource(workspaceDir),
-    );
+    expect(meta.settingSources.enabledProviders).toBe(globalStatusConfigSource);
+    expect(meta.settingSources.anthropicBinaryPath).toBe(globalStatusConfigSource);
+    expect(meta.settingSources.googleModels).toBe(globalStatusConfigSource);
+    expect(meta.settingSources.cursorIncludedApiUsd).toBe(globalStatusConfigSource);
+    expect(meta.settingSources.cursorBillingCycleStartDay).toBe(globalStatusConfigSource);
+    expect(meta.settingSources["pricingSnapshot.source"]).toBe(globalStatusConfigSource);
+    expect(meta.settingSources["pricingSnapshot.autoRefresh"]).toBe(globalStatusConfigSource);
+    expect(meta.settingSources.formatStyle).toBe(globalStatusConfigSource);
+    expect(meta.settingSources["layout.maxWidth"]).toBe(globalStatusConfigSource);
+    expect(meta.settingSources["layout.narrowAt"]).toBe(statusConfigSource(workspaceDir));
   });
 
   it("accepts toastStyle alias in file-backed config and still prefers formatStyle when present", async () => {

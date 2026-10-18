@@ -14,6 +14,23 @@ vi.mock("../src/lib/anthropic.js", () => ({
 }));
 
 describe("anthropic provider", () => {
+  it("passes diagnostic opt-in to availability and normal quota queries", async () => {
+    const { hasAnthropicCredentialsConfigured, queryAnthropicStatus } =
+      await import("../src/lib/anthropic.js");
+    vi.mocked(queryAnthropicStatus).mockResolvedValueOnce(null);
+    const ctx = createProviderAvailabilityContext({
+      configOverrides: { anthropicDiagnosticLogging: true },
+    });
+    await anthropicProvider.isAvailable(ctx);
+    await anthropicProvider.fetch(ctx);
+    expect(hasAnthropicCredentialsConfigured).toHaveBeenLastCalledWith(
+      expect.objectContaining({ anthropicDiagnosticLogging: true }),
+    );
+    expect(queryAnthropicStatus).toHaveBeenLastCalledWith(
+      expect.objectContaining({ anthropicDiagnosticLogging: true }),
+    );
+  });
+
   it("returns attempted:false when Anthropic status is unavailable locally", async () => {
     const { queryAnthropicStatus } = await import("../src/lib/anthropic.js");
     (queryAnthropicStatus as any).mockResolvedValueOnce(null);
@@ -104,7 +121,9 @@ describe("anthropic provider", () => {
     (hasAnthropicCredentialsConfigured as any).mockResolvedValue(true);
 
     await expect(
-      anthropicProvider.isAvailable(createProviderAvailabilityContext({ providerIds: ["anthropic"] })),
+      anthropicProvider.isAvailable(
+        createProviderAvailabilityContext({ providerIds: ["anthropic"] }),
+      ),
     ).resolves.toBe(true);
     await expect(
       anthropicProvider.isAvailable(createProviderAvailabilityContext({ providerIds: ["claude"] })),
@@ -120,9 +139,8 @@ describe("anthropic provider", () => {
   });
 
   it("passes the configured Claude binary path through Anthropic probes", async () => {
-    const { hasAnthropicCredentialsConfigured, queryAnthropicStatus } = await import(
-      "../src/lib/anthropic.js"
-    );
+    const { hasAnthropicCredentialsConfigured, queryAnthropicStatus } =
+      await import("../src/lib/anthropic.js");
     (hasAnthropicCredentialsConfigured as any).mockResolvedValue(true);
     (queryAnthropicStatus as any).mockResolvedValueOnce(null);
 

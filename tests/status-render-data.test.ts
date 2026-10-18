@@ -29,6 +29,7 @@ import {
   collectStatusRenderData,
   collectStatusStatusLiveProbes,
   matchesStatusProviderCurrentSelection,
+  resolveStatusRenderSelection,
 } from "../src/lib/status-render-data.js";
 import { __resetStatusStateForTests } from "../src/lib/status-state.js";
 import { DEFAULT_CONFIG } from "../src/lib/types.js";
@@ -53,6 +54,15 @@ describe("collectStatusRenderData shared status state", () => {
     vi.restoreAllMocks();
     __resetStatusStateForTests();
     await rm(TEST_RUNTIME_ROOT, { recursive: true, force: true });
+  });
+
+  it("propagates diagnostic opt-in through render context", async () => {
+    const selection = await resolveStatusRenderSelection({
+      client: TEST_CLIENT,
+      config: { ...DEFAULT_CONFIG, anthropicDiagnosticLogging: true },
+      providers: [],
+    });
+    expect(selection?.ctx.config.anthropicDiagnosticLogging).toBe(true);
   });
 
   it("uses explicitly provided providers instead of the global registry", async () => {

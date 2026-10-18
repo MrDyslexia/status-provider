@@ -147,11 +147,11 @@ Then, inside an OpenCode chat session:
 
 ![Sidebar default variant, classic layout](docs/images/sidebar-variant-a-classic.png)
 
-*Classic sidebar layout: `textVariant: "default"`, `providerNameVariant: "full"`,
+_Classic sidebar layout: `textVariant: "default"`, `providerNameVariant: "full"`,
 `percentVariant: "both"`. This is the only variant with a committed
 screenshot right now — the other combinations below are described in text so
 you know what to expect before you generate your own preview with
-`status-provider config`.*
+`status-provider config`._
 
 ### Other sidebar visual variants
 
@@ -160,15 +160,15 @@ Every visual field below is defined in `StatusProviderConfig`
 [`validation/qa-matrix.md`](validation/qa-matrix.md), which is the source of
 truth for these values and defaults.
 
-| Field | Values | Default | What changes |
-|---|---|---|---|
-| `formatStyle` | `singleWindow`, `allWindows` | `singleWindow` | `singleWindow` collapses each provider to one row; `allWindows` shows every quota window (e.g. 5-hour + weekly) per provider. |
-| `percentDisplayMode` | `remaining`, `used` | `remaining` | Whether the percentage shown means "% left" or "% consumed". |
-| `textVariant` | `default`, `minimal`, `box`, `emoji` | `default` | Row layout style — see mockups below. |
-| `providerNameVariant` | `full`, `short`, `icon` | `full` | `full` prints the provider's display name (e.g. "Synthetic"); `short` prints an abbreviation (e.g. "Synth"); `icon` prefixes a symbol before the short name (e.g. "◇ Synth"). **Known quirk:** Anthropic's internal group name is `Claude` (not `Anthropic`), which isn't recognized by the name lookup — so this setting currently has no visible effect on the Anthropic row; it always renders as `[Claude]` regardless of variant (confirmed against real output). |
-| `percentVariant` | `number`, `bar`, `both` | `both` | `number` shows just `72%`; `bar` shows just a progress bar; `both` shows bar + percentage. Note: in the sidebar, `bar` and `both` currently render identically. |
-| `colorVariant` | `auto`, `none` | `none` | `auto` colors rows by remaining status. Has **no visible effect in the sidebar** (ANSI is stripped there) — it only changes toast and CLI output. |
-| `alignmentVariant` | `left`, `right` | `left` | Row alignment. Only affects `minimal` text variant; other text variants ignore it. |
+| Field                 | Values                               | Default        | What changes                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------- | ------------------------------------ | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `formatStyle`         | `singleWindow`, `allWindows`         | `singleWindow` | `singleWindow` collapses each provider to one row; `allWindows` shows every quota window (e.g. 5-hour + weekly) per provider.                                                                                                                                                                                                                                                                                                                                          |
+| `percentDisplayMode`  | `remaining`, `used`                  | `remaining`    | Whether the percentage shown means "% left" or "% consumed".                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `textVariant`         | `default`, `minimal`, `box`, `emoji` | `default`      | Row layout style — see mockups below.                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `providerNameVariant` | `full`, `short`, `icon`              | `full`         | `full` prints the provider's display name (e.g. "Synthetic"); `short` prints an abbreviation (e.g. "Synth"); `icon` prefixes a symbol before the short name (e.g. "◇ Synth"). **Known quirk:** Anthropic's internal group name is `Claude` (not `Anthropic`), which isn't recognized by the name lookup — so this setting currently has no visible effect on the Anthropic row; it always renders as `[Claude]` regardless of variant (confirmed against real output). |
+| `percentVariant`      | `number`, `bar`, `both`              | `both`         | `number` shows just `72%`; `bar` shows just a progress bar; `both` shows bar + percentage. Note: in the sidebar, `bar` and `both` currently render identically.                                                                                                                                                                                                                                                                                                        |
+| `colorVariant`        | `auto`, `none`                       | `none`         | `auto` colors rows by remaining status. Has **no visible effect in the sidebar** (ANSI is stripped there) — it only changes toast and CLI output.                                                                                                                                                                                                                                                                                                                      |
+| `alignmentVariant`    | `left`, `right`                      | `left`         | Row alignment. Only affects `minimal` text variant; other text variants ignore it.                                                                                                                                                                                                                                                                                                                                                                                     |
 
 Illustrative mockups of `textVariant` (not real screenshots — generate your
 own with the `status-provider config` live preview to see exact output):
@@ -233,9 +233,9 @@ the shape of every top-level field):
 }
 ```
 
-> `percentDisplayMode` defaults to `"remaining"` (percent *left*). The
+> `percentDisplayMode` defaults to `"remaining"` (percent _left_). The
 > `"used"` value above is just this example choosing to display percent
-> *consumed* instead — it is not the built-in default.
+> _consumed_ instead — it is not the built-in default.
 
 You don't need to specify every field — `status-provider` merges your file
 on top of `DEFAULT_CONFIG`, so a config file can be as small as a single
@@ -262,33 +262,98 @@ for that):
 Key top-level fields (see `src/lib/types.ts` for the full, authoritative
 list — this covers the fields most people touch):
 
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `enabled` | `boolean` | `true` | Master on/off switch for the plugin. |
-| `enableToast` | `boolean` | `true` | If `false`, never show popup toasts (commands/tools still work). |
-| `formatStyle` | `"singleWindow" \| "allWindows"` | `"singleWindow"` | Shared row style for toasts and the TUI sidebar. Legacy aliases `"classic"` and `"grouped"` are still accepted. |
-| `percentDisplayMode` | `"remaining" \| "used"` | `"remaining"` | Shared percent meaning for toasts and the sidebar. |
-| `enabledProviders` | `string[] \| "auto"` | `"auto"` | Provider ids to query. `"auto"` enables every provider whose `isAvailable()` returns true at runtime. |
-| `providerOrder` | `string[]` | `[]` | Explicit display order. Providers not listed are appended in default registry order; also implicitly disables providers omitted from the list when `enabledProviders` is `"auto"`. |
-| `textVariant` / `toastTextVariant` | `"default" \| "minimal" \| "box" \| "emoji"` | `"default"` | Sidebar/CLI vs. toast row style, configured independently. |
-| `providerNameVariant` / `toastProviderNameVariant` | `"full" \| "short" \| "icon"` | `"full"` | Provider name rendering. |
-| `percentVariant` / `toastPercentVariant` | `"number" \| "bar" \| "both"` | `"both"` | Percent rendering. |
-| `colorVariant` / `toastColorVariant` | `"auto" \| "none"` | `"none"` | Color by remaining status, or no color. |
-| `alignmentVariant` / `toastAlignmentVariant` | `"left" \| "right"` | `"left"` | Row alignment (only visible with `minimal`). |
-| `debug` | `boolean` | `false` | Appends a debug footer to the toast; shows a debug-only toast explaining why nothing rendered if applicable. |
-| `minIntervalMs` | `number` | `300000` (5 min) | Minimum interval between toast pops. |
-| `toastDurationMs` | `number` | `9000` | How long a toast stays visible. |
-| `onlyCurrentModel` | `boolean` | `false` | If `true`, only show status for the current model. |
-| `showSessionTokens` | `boolean` | `true` | Show the session input/output token section when data is available. |
-| `showSessionTimer` | `boolean` | `true` | Show a session stopwatch (`HH:MM:SS`, elapsed since the session was created) on the right of the sidebar "Status" heading and in the session-prompt compact line. |
-| `tuiSidebarPanel.enabled` | `boolean` | `true` | Sidebar panel visibility when the TUI plugin is installed. |
-| `tuiCompactStatus.enabled` | `boolean` | `false` | Opt-in compact status text for TUI prompt/home surfaces. The session-prompt line always narrows to the current model's provider (with reset time) regardless of `onlyCurrentModel`; the home line still shows every provider. |
-| `anthropicBinaryPath` | `string` | `"claude"` | Path/command name for the local Claude CLI used by Anthropic probing. |
-| `pricingSnapshot.source` | `"auto" \| "bundled" \| "runtime"` | `"auto"` | Where pricing data comes from. |
-| `requestTimeoutMs` | `number` | `5000` | Timeout for remote provider API calls. |
+| Field                                              | Type                                         | Default          | Description                                                                                                                                                                                                                   |
+| -------------------------------------------------- | -------------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`                                          | `boolean`                                    | `true`           | Master on/off switch for the plugin.                                                                                                                                                                                          |
+| `enableToast`                                      | `boolean`                                    | `true`           | If `false`, never show popup toasts (commands/tools still work).                                                                                                                                                              |
+| `formatStyle`                                      | `"singleWindow" \| "allWindows"`             | `"singleWindow"` | Shared row style for toasts and the TUI sidebar. Legacy aliases `"classic"` and `"grouped"` are still accepted.                                                                                                               |
+| `percentDisplayMode`                               | `"remaining" \| "used"`                      | `"remaining"`    | Shared percent meaning for toasts and the sidebar.                                                                                                                                                                            |
+| `enabledProviders`                                 | `string[] \| "auto"`                         | `"auto"`         | Provider ids to query. `"auto"` enables every provider whose `isAvailable()` returns true at runtime.                                                                                                                         |
+| `providerOrder`                                    | `string[]`                                   | `[]`             | Explicit display order. Providers not listed are appended in default registry order; also implicitly disables providers omitted from the list when `enabledProviders` is `"auto"`.                                            |
+| `textVariant` / `toastTextVariant`                 | `"default" \| "minimal" \| "box" \| "emoji"` | `"default"`      | Sidebar/CLI vs. toast row style, configured independently.                                                                                                                                                                    |
+| `providerNameVariant` / `toastProviderNameVariant` | `"full" \| "short" \| "icon"`                | `"full"`         | Provider name rendering.                                                                                                                                                                                                      |
+| `percentVariant` / `toastPercentVariant`           | `"number" \| "bar" \| "both"`                | `"both"`         | Percent rendering.                                                                                                                                                                                                            |
+| `colorVariant` / `toastColorVariant`               | `"auto" \| "none"`                           | `"none"`         | Color by remaining status, or no color.                                                                                                                                                                                       |
+| `alignmentVariant` / `toastAlignmentVariant`       | `"left" \| "right"`                          | `"left"`         | Row alignment (only visible with `minimal`).                                                                                                                                                                                  |
+| `debug`                                            | `boolean`                                    | `false`          | Appends a debug footer to the toast; shows a debug-only toast explaining why nothing rendered if applicable.                                                                                                                  |
+| `minIntervalMs`                                    | `number`                                     | `300000` (5 min) | Minimum interval between toast pops.                                                                                                                                                                                          |
+| `toastDurationMs`                                  | `number`                                     | `9000`           | How long a toast stays visible.                                                                                                                                                                                               |
+| `onlyCurrentModel`                                 | `boolean`                                    | `false`          | If `true`, only show status for the current model.                                                                                                                                                                            |
+| `showSessionTokens`                                | `boolean`                                    | `true`           | Show the session input/output token section when data is available.                                                                                                                                                           |
+| `showSessionTimer`                                 | `boolean`                                    | `true`           | Show a session stopwatch (`HH:MM:SS`, elapsed since the session was created) on the right of the sidebar "Status" heading and in the session-prompt compact line.                                                             |
+| `tuiSidebarPanel.enabled`                          | `boolean`                                    | `true`           | Sidebar panel visibility when the TUI plugin is installed.                                                                                                                                                                    |
+| `tuiCompactStatus.enabled`                         | `boolean`                                    | `false`          | Opt-in compact status text for TUI prompt/home surfaces. The session-prompt line always narrows to the current model's provider (with reset time) regardless of `onlyCurrentModel`; the home line still shows every provider. |
+| `anthropicBinaryPath`                              | `string`                                     | `"claude"`       | Path/command name for the local Claude CLI used by Anthropic probing.                                                                                                                                                         |
+| `anthropicDiagnosticLogging`                       | `boolean`                                    | `false`          | Opt-in local JSONL evidence for Anthropic quota disappearance and recovery; independent of `debug`.                                                                                                                           |
+| `pricingSnapshot.source`                           | `"auto" \| "bundled" \| "runtime"`           | `"auto"`         | Where pricing data comes from.                                                                                                                                                                                                |
+| `requestTimeoutMs`                                 | `number`                                     | `5000`           | Timeout for remote provider API calls.                                                                                                                                                                                        |
 
 Clean-start policy: `status-provider` does **not** migrate legacy config
 automatically.
+
+### Capturing Anthropic quota disappearance
+
+This development change records diagnostic evidence only. It does not fix quota
+availability, refresh credentials, or change the installed plugin automatically.
+There is no live Anthropic incident evidence yet; verification uses mocks and
+isolated Node/Bun child processes, never real credentials or provider calls.
+
+After separately installing a build containing this change and restarting
+OpenCode, add this field to the existing `status-provider/config.json`:
+
+```json
+{ "anthropicDiagnosticLogging": true }
+```
+
+Let normal polling run. When quota disappears, note the UTC time and whether
+inference still works. Copy `anthropic-diagnostics.jsonl` and any `.1` / `.2`
+rotations promptly, including the later recovery period. Set the field to `false`
+or remove it to stop new logging (already queued writes may finish). `debug`
+controls toast diagnostics, not this file. Disabling does not delete old logs.
+
+The file is `<runtime stateDir>/status-provider/anthropic-diagnostics.jsonl`.
+The existing runtime helper resolves `stateDir` from `XDG_STATE_HOME`, then
+`xdg-basedir`'s state location, then `~/.local/state`, appending `opencode`.
+With the current dependency and no XDG override, Linux/macOS use
+`~/.local/state/opencode/status-provider/anthropic-diagnostics.jsonl`; Windows
+uses `%USERPROFILE%\.local\state\opencode\status-provider\anthropic-diagnostics.jsonl`.
+This logger uses the primary state directory, not the legacy AppData candidates.
+
+Records contain UTC timestamps, a random local run identifier, fixed stage/outcome
+and source categories, durations, HTTP status, data/attempt flags, and cache TTL or
+retry delays. No tokens, account/session identifiers, credential paths, URLs,
+headers, bodies, command output, raw errors, cache keys, or quota values are
+logged. Timing/status metadata is still diagnostic data: inspect before sharing.
+
+Storage is limited to a 1 MiB active file and two 1 MiB rotations. On writes,
+known files whose oldest record exceeds seven days are removed; this is
+opportunistic retention, not a background deletion service. The asynchronous
+queue holds at most 128 pending records plus one 32-record batch. Permission,
+rotation, queue overflow and lock-contention failures silently drop evidence and
+never delay quota results. Server and TUI writers share a nonblocking native lock
+on the persistent `anthropic-diagnostics.jsonl.lock` sentinel. The operating system
+releases ownership on descriptor close or process termination; the empty file
+remaining after a crash does not retain ownership. Never delete or rotate this
+sentinel while writers may run: replacement files would split mutual exclusion.
+The addon is loaded only for enabled queued work; unsupported native loading or
+locking silently drops evidence without failing plugin startup. A crash during
+rotation may lose some rotated evidence, but subsequent bounded writes resume.
+New files request owner-only permissions; Windows access remains governed by
+filesystem ACLs.
+
+When upgrading from the earlier pathname-lock implementation, stop all old server
+and TUI writers and restart them with the same new build. Do not mix old and new
+locking protocols. An existing legacy `.lock` file can remain; its contents are
+not read as owner metadata. This build requires `fs-native-extensions@1.5.1` and
+its native prebuild to be installed alongside the plugin. Node 24.19.0 and Bun
+1.3.14 have been verified on Windows x64; other platform/runtime combinations
+have not been exercised by this change.
+
+Use `http` and `credentials` events to identify originating failures, then
+`query` and `shared-cache` events to distinguish cached errors, unattempted cache
+deletion, 429 stale-data fallback and recovery. Cache hits include remaining TTL;
+they do not mean a fresh network request succeeded. Missing records are not proof
+that no failure occurred, and this log does not instrument inference refresh.
 
 ### Path B — Interactive wizard (`status-provider config`)
 
@@ -451,21 +516,21 @@ status-provider show [--provider <provider-id>]
 status-provider config [--dry-run]
 ```
 
-| Command | Flags | What it does |
-|---|---|---|
-| `init` | — | Runs the interactive `status-provider` installer. |
-| `update` | `--global` (`-g`), `--project` (`-p`), `--dry-run` (`-n`) | Pins configured OpenCode server/TUI plugin entries to the latest exact npm version. By default, checks project and global scopes. |
-| `show` | `--provider <provider-id>` | Prints a quick status glance; optionally scoped to a single provider. |
-| `config` | `--dry-run` (`-n`) | Interactive config editor for enabled providers, ordering, and display variants. `--dry-run` previews the wizard and its resulting diff without saving. |
-| `--help` / `-h` / `help` | — | Prints CLI usage. |
+| Command                  | Flags                                                     | What it does                                                                                                                                            |
+| ------------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `init`                   | —                                                         | Runs the interactive `status-provider` installer.                                                                                                       |
+| `update`                 | `--global` (`-g`), `--project` (`-p`), `--dry-run` (`-n`) | Pins configured OpenCode server/TUI plugin entries to the latest exact npm version. By default, checks project and global scopes.                       |
+| `show`                   | `--provider <provider-id>`                                | Prints a quick status glance; optionally scoped to a single provider.                                                                                   |
+| `config`                 | `--dry-run` (`-n`)                                        | Interactive config editor for enabled providers, ordering, and display variants. `--dry-run` previews the wizard and its resulting diff without saving. |
+| `--help` / `-h` / `help` | —                                                         | Prints CLI usage.                                                                                                                                       |
 
 ## OpenCode slash commands
 
-| Command | What it does |
-|---|---|
-| `/status-provider` | Show status toast output in chat. |
-| `/status-provider-toast` | Force-show the actual popup toast right now (bypasses cache/interval). |
-| `/status-provider-info` | Diagnostics for toast + TUI + pricing + local storage (includes an unknown-pricing report). |
+| Command                  | What it does                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------- |
+| `/status-provider`       | Show status toast output in chat.                                                           |
+| `/status-provider-toast` | Force-show the actual popup toast right now (bypasses cache/interval).                      |
+| `/status-provider-info`  | Diagnostics for toast + TUI + pricing + local storage (includes an unknown-pricing report). |
 
 The plugin also registers a few additional commands not covered above:
 `/status_config` (same wizard as `status-provider config`, run from inside
@@ -480,26 +545,26 @@ already exist; "needs quick setup" providers require an extra step (see
 `quickSetupAnchor` entries in `src/lib/provider-metadata.ts` for the
 in-plugin pointer to that setup flow).
 
-| Provider id | Display name | Auth type | Notes |
-|---|---|---|---|
-| `anthropic` | Anthropic | Local CLI auth | Reads status via the local Claude CLI (`anthropicBinaryPath`, default `claude`); needs quick setup. |
-| `copilot` | Copilot | GitHub OAuth or PAT | OAuth for the personal flow; a fine-grained PAT is needed for org/enterprise billing reports. Usually auto-detected. |
-| `openai` | OpenAI | OpenCode OAuth token | Auto-detected from OpenCode's ChatGPT/Codex OAuth session. |
-| `cursor` | Cursor | OAuth via companion plugin | Needs a companion Cursor auth plugin plus local usage accounting; needs quick setup. |
-| `qwen-code` | Qwen | OAuth via companion plugin | Needs a companion Qwen auth plugin; usage is locally estimated, not a remote quota API; needs quick setup. |
-| `alibaba-coding-plan` | Alibaba Coding Plan | OpenCode-managed API key | Auto-detected from OpenCode auth, env var, or global config; usage is locally estimated. |
-| `synthetic` | Synthetic | OpenCode-managed API key | Auto-detected from OpenCode auth, env var, or global config. |
-| `chutes` | Chutes | OpenCode-managed API key | Usually auto-detected from OpenCode auth, env var, or global config. |
-| `crof` | Crof | External API key | Requires `CROF_API_KEY` / `CROFAI_API_KEY` env var or trusted global config; not available through OpenCode `/connect`. |
-| `google-antigravity` | Google | OAuth via companion plugin | Needs the Google Antigravity companion auth plugin; needs quick setup. |
-| `google-gemini-cli` | Gemini CLI | OAuth via companion plugin | Needs a Gemini CLI companion auth plugin; needs quick setup. |
-| `zai` | Z.ai | OpenCode-managed API key | Auto-detected from OpenCode auth, env var, or global config. |
-| `zhipu` | Zhipu | OpenCode-managed API key | Auto-detected from OpenCode auth, env var, or global config. |
-| `nanogpt` | NanoGPT | OpenCode-managed API key | Usually auto-detected from OpenCode auth, env var, or global config. |
-| `minimax-coding-plan` | MiniMax Coding Plan | OpenCode-managed API key | Auto-detected from OpenCode auth, env var, or global config. |
-| `minimax-china-coding-plan` | MiniMax Coding Plan (CN) | OpenCode-managed API key | China-region MiniMax plan; auto-detected the same way as `minimax-coding-plan`. |
-| `kimi-for-coding` | Kimi Code | OpenCode-managed API key | Auto-detected from OpenCode auth, env var, or global config. |
-| `opencode-go` | OpenCode Go | Session state only | Scrapes the OpenCode Go dashboard; requires `workspaceId` and `authCookie`; needs quick setup. |
+| Provider id                 | Display name             | Auth type                  | Notes                                                                                                                   |
+| --------------------------- | ------------------------ | -------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `anthropic`                 | Anthropic                | Local CLI auth             | Reads status via the local Claude CLI (`anthropicBinaryPath`, default `claude`); needs quick setup.                     |
+| `copilot`                   | Copilot                  | GitHub OAuth or PAT        | OAuth for the personal flow; a fine-grained PAT is needed for org/enterprise billing reports. Usually auto-detected.    |
+| `openai`                    | OpenAI                   | OpenCode OAuth token       | Auto-detected from OpenCode's ChatGPT/Codex OAuth session.                                                              |
+| `cursor`                    | Cursor                   | OAuth via companion plugin | Needs a companion Cursor auth plugin plus local usage accounting; needs quick setup.                                    |
+| `qwen-code`                 | Qwen                     | OAuth via companion plugin | Needs a companion Qwen auth plugin; usage is locally estimated, not a remote quota API; needs quick setup.              |
+| `alibaba-coding-plan`       | Alibaba Coding Plan      | OpenCode-managed API key   | Auto-detected from OpenCode auth, env var, or global config; usage is locally estimated.                                |
+| `synthetic`                 | Synthetic                | OpenCode-managed API key   | Auto-detected from OpenCode auth, env var, or global config.                                                            |
+| `chutes`                    | Chutes                   | OpenCode-managed API key   | Usually auto-detected from OpenCode auth, env var, or global config.                                                    |
+| `crof`                      | Crof                     | External API key           | Requires `CROF_API_KEY` / `CROFAI_API_KEY` env var or trusted global config; not available through OpenCode `/connect`. |
+| `google-antigravity`        | Google                   | OAuth via companion plugin | Needs the Google Antigravity companion auth plugin; needs quick setup.                                                  |
+| `google-gemini-cli`         | Gemini CLI               | OAuth via companion plugin | Needs a Gemini CLI companion auth plugin; needs quick setup.                                                            |
+| `zai`                       | Z.ai                     | OpenCode-managed API key   | Auto-detected from OpenCode auth, env var, or global config.                                                            |
+| `zhipu`                     | Zhipu                    | OpenCode-managed API key   | Auto-detected from OpenCode auth, env var, or global config.                                                            |
+| `nanogpt`                   | NanoGPT                  | OpenCode-managed API key   | Usually auto-detected from OpenCode auth, env var, or global config.                                                    |
+| `minimax-coding-plan`       | MiniMax Coding Plan      | OpenCode-managed API key   | Auto-detected from OpenCode auth, env var, or global config.                                                            |
+| `minimax-china-coding-plan` | MiniMax Coding Plan (CN) | OpenCode-managed API key   | China-region MiniMax plan; auto-detected the same way as `minimax-coding-plan`.                                         |
+| `kimi-for-coding`           | Kimi Code                | OpenCode-managed API key   | Auto-detected from OpenCode auth, env var, or global config.                                                            |
+| `opencode-go`               | OpenCode Go              | Session state only         | Scrapes the OpenCode Go dashboard; requires `workspaceId` and `authCookie`; needs quick setup.                          |
 
 ## Development
 

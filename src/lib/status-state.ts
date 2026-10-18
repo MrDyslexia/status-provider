@@ -8,6 +8,10 @@ import { writeJsonAtomic } from "./atomic-json.js";
 import { getOpencodeRuntimeDirs } from "./opencode-runtime-paths.js";
 import { isLiveLocalUsageProviderId } from "./provider-metadata.js";
 import { getPackageVersion } from "./version.js";
+import {
+  logAnthropicDiagnostic,
+  type AnthropicDiagnosticEvent,
+} from "./anthropic-diagnostic-log.js";
 
 const STATUS_PROVIDER_CACHE_VERSION = 2 as const;
 const STATUS_PROVIDER_CACHE_PACKAGE_VERSION_FALLBACK = "unknown";
@@ -172,16 +176,17 @@ function isPersistedStatusProviderCacheEntry(
   }
 
   const entry = value as Record<string, unknown>;
-    return (
-      entry.version === STATUS_PROVIDER_CACHE_VERSION &&
-      entry.packageVersion === packageVersion &&
-      entry.key === key &&
-      entry.providerId === providerId &&
-      typeof entry.timestamp === "number" &&
-      isStatusProviderResult(entry.result) &&
-      (entry.lastSuccessfulResult === undefined || isStatusProviderResult(entry.lastSuccessfulResult)) &&
-      (entry.rateLimitedUntil === undefined || typeof entry.rateLimitedUntil === "number")
-    );
+  return (
+    entry.version === STATUS_PROVIDER_CACHE_VERSION &&
+    entry.packageVersion === packageVersion &&
+    entry.key === key &&
+    entry.providerId === providerId &&
+    typeof entry.timestamp === "number" &&
+    isStatusProviderResult(entry.result) &&
+    (entry.lastSuccessfulResult === undefined ||
+      isStatusProviderResult(entry.lastSuccessfulResult)) &&
+    (entry.rateLimitedUntil === undefined || typeof entry.rateLimitedUntil === "number")
+  );
 }
 
 async function safeRm(path: string): Promise<void> {
@@ -230,6 +235,7 @@ async function readPersistedStatusProviderCacheEntry(params: {
   packageVersion: string;
   ttlMs: number;
   now: number;
+  anthropicDiagnosticLogging?: boolean;
 }): Promise<PersistedStatusProviderCacheEntry | null> {
   if (params.ttlMs <= 0) {
     return null;
@@ -253,6 +259,14 @@ async function readPersistedStatusProviderCacheEntry(params: {
     }
 
     if (params.now - parsed.timestamp >= resolveCacheTtlMs(parsed.result, params.ttlMs)) {
+      if (params.providerId === "anthropic")
+        logAnthropicDiagnostic(params.anthropicDiagnosticLogging, {
+          stage: "shared-cache",
+          source: "persisted",
+          outcome: "expiry",
+          hasData: parsed.result.entries.length > 0,
+          remainingTtlMs: 0,
+        });
       return null;
     }
 
@@ -286,7 +300,9 @@ async function writePersistedStatusProviderCacheEntry(
 }
 
 /** Return the rate-limited-until timestamp for a cache entry, or null. */
-function getEntryRateLimitedUntil(entry: PersistedStatusProviderCacheEntry | null | undefined): number | null {
+function getEntryRateLimitedUntil(
+  entry: PersistedStatusProviderCacheEntry | null | undefined,
+): number | null {
   if (!entry || typeof entry !== "object") return null;
   if (typeof entry.rateLimitedUntil === "number") return entry.rateLimitedUntil;
   if (entry.result && typeof entry.result.rateLimitedUntil === "number") {
@@ -325,9 +341,25 @@ export async function fetchStatusProviderResult(params: {
   bypassCache?: boolean;
 }): Promise<StatusProviderResult> {
   const { provider, ctx, ttlMs, bypassCache = false } = params;
+  const diagnostic = (event: Omit<AnthropicDiagnosticEvent, "stage">) => {
+    if (provider.id === "anthropic")
+      logAnthropicDiagnostic(ctx.config.anthropicDiagnosticLogging, {
+        stage: "shared-cache",
+        ...event,
+      });
+  };
 
   if (bypassCache || isLiveLocalUsageProviderId(provider.id)) {
-    return cloneStatusProviderResult(await provider.fetch(ctx));
+    diagnostic({ outcome: "bypass" });
+    const started = Date.now();
+    const result = await provider.fetch(ctx);
+    diagnostic({
+      outcome: result.errors.length ? "error" : "success",
+      attempted: result.attempted,
+      hasData: result.entries.length > 0,
+      durationMs: Date.now() - started,
+    });
+    return cloneStatusProviderResult(result);
   }
 
   const key = buildStatusProviderStateCacheKey(provider.id, ctx);
@@ -347,12 +379,32 @@ export async function fetchStatusProviderResult(params: {
     (isEntryRateLimited(inMemory, now) ||
       now - inMemory.timestamp < resolveCacheTtlMs(inMemory.result, ttlMs))
   ) {
+    diagnostic({
+      outcome: "hit",
+      source: "memory",
+      attempted: inMemory.result.attempted,
+      hasData: inMemory.result.entries.length > 0,
+      remainingTtlMs: Math.max(
+        0,
+        resolveCacheTtlMs(inMemory.result, ttlMs) - (now - inMemory.timestamp),
+      ),
+      retryAfterMs: Math.max(0, (getEntryRateLimitedUntil(inMemory) ?? now) - now),
+    });
     return cloneStatusProviderResult(inMemory.result);
   }
+
+  if (inMemory)
+    diagnostic({
+      outcome: "expiry",
+      source: "memory",
+      hasData: inMemory.result.entries.length > 0,
+      remainingTtlMs: 0,
+    });
 
   // 2. De-dupe in-flight requests for the same key.
   const inFlight = inFlightByKey.get(key);
   if (inFlight) {
+    diagnostic({ outcome: "dedup" });
     return cloneStatusProviderResult(await inFlight);
   }
 
@@ -366,12 +418,19 @@ export async function fetchStatusProviderResult(params: {
     packageVersion,
     ttlMs,
     now,
+    anthropicDiagnosticLogging: ctx.config.anthropicDiagnosticLogging,
   });
-  if (
-    persisted &&
-    !isEntryRateLimited(persisted, now) &&
-    now - persisted.timestamp < ttlMs
-  ) {
+  if (persisted && !isEntryRateLimited(persisted, now) && now - persisted.timestamp < ttlMs) {
+    diagnostic({
+      outcome: "hit",
+      source: "persisted",
+      attempted: persisted.result.attempted,
+      hasData: persisted.result.entries.length > 0,
+      remainingTtlMs: Math.max(
+        0,
+        resolveCacheTtlMs(persisted.result, ttlMs) - (now - persisted.timestamp),
+      ),
+    });
     inMemoryCache.set(key, {
       ...persisted,
       result: cloneStatusProviderResult(persisted.result),
@@ -379,8 +438,11 @@ export async function fetchStatusProviderResult(params: {
     return cloneStatusProviderResult(persisted.result);
   }
 
+  diagnostic({ outcome: "miss" });
+
   // 4. Fetch: capture previous entries first for the stale-data fallback.
   const previousInMemory = inMemory;
+  let previousFailed = Boolean(previousInMemory?.result.errors.length);
   let previousEntries: StatusProviderResult["entries"] = previousInMemory?.result.entries ?? [];
   let previousSuccessfulResult = previousInMemory?.lastSuccessfulResult
     ? cloneStatusProviderResult(previousInMemory.lastSuccessfulResult)
@@ -400,12 +462,16 @@ export async function fetchStatusProviderResult(params: {
         packageVersion,
         ttlMs: STATUS_PROVIDER_STALE_TTL_MS,
         now,
+        anthropicDiagnosticLogging: ctx.config.anthropicDiagnosticLogging,
       });
+      previousFailed ||= Boolean(previousPersisted?.result.errors.length);
       if (previousPersisted?.result.entries.length) {
         previousEntries = previousPersisted.result.entries;
       }
       if (!previousSuccessfulResult && previousPersisted?.lastSuccessfulResult) {
-        previousSuccessfulResult = cloneStatusProviderResult(previousPersisted.lastSuccessfulResult);
+        previousSuccessfulResult = cloneStatusProviderResult(
+          previousPersisted.lastSuccessfulResult,
+        );
       }
       if (!previousSuccessfulResult && previousPersisted?.result.entries.length) {
         previousSuccessfulResult = buildReusableSuccessResult(previousPersisted.result);
@@ -416,10 +482,30 @@ export async function fetchStatusProviderResult(params: {
   }
 
   const fetchPromise = (async () => {
-    const fetched = await provider.fetch(ctx);
+    const started = Date.now();
+    let fetched: StatusProviderResult;
+    try {
+      fetched = await provider.fetch(ctx);
+    } catch (error) {
+      diagnostic({ outcome: "error", durationMs: Date.now() - started });
+      throw error;
+    }
     const snapshot = cloneStatusProviderResult(fetched);
+    diagnostic({
+      outcome: snapshot.errors.length
+        ? "error"
+        : previousFailed && snapshot.entries.length
+          ? "recovery"
+          : "success",
+      attempted: snapshot.attempted,
+      hasData: snapshot.entries.length > 0,
+      durationMs: Date.now() - started,
+      remainingTtlMs: snapshot.attempted ? resolveCacheTtlMs(snapshot, ttlMs) : 0,
+      retryAfterMs: Math.max(0, (snapshot.rateLimitedUntil ?? Date.now()) - Date.now()),
+    });
 
     if (!snapshot.attempted) {
+      diagnostic({ outcome: "unattempted-deletion", attempted: false, hasData: false });
       inMemoryCache.delete(key);
       await safeRm(getStatusProviderStateCacheFilePath(provider.id, key));
       return snapshot;
@@ -433,6 +519,12 @@ export async function fetchStatusProviderResult(params: {
       typeof snapshot.rateLimitedUntil === "number" ? snapshot.rateLimitedUntil : null;
     const shouldUseStaleEntries =
       rateLimitedUntil !== null && snapshot.entries.length === 0 && previousEntries.length > 0;
+    if (shouldUseStaleEntries)
+      diagnostic({
+        outcome: "stale-fallback",
+        hasData: true,
+        retryAfterMs: Math.max(0, rateLimitedUntil - Date.now()),
+      });
     const resultToCache = shouldUseStaleEntries
       ? { ...snapshot, entries: previousEntries.map((entry) => ({ ...entry })) }
       : snapshot;

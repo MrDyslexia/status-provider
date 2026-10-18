@@ -15,10 +15,12 @@ import { join } from "path";
 
 import { sanitizeDisplaySnippet, sanitizeDisplayText } from "./display-sanitize.js";
 import { fetchWithTimeout } from "./http.js";
-import { getAuthPath, invalidateAuthFileCache, readAuthFileCached } from "./opencode-auth.js";
 import {
-  isExpiringSoon,
-} from "./anthropic-credentials.js";
+  logAnthropicDiagnostic,
+  type AnthropicDiagnosticEvent,
+} from "./anthropic-diagnostic-log.js";
+import { getAuthPath, invalidateAuthFileCache, readAuthFileCached } from "./opencode-auth.js";
+import { isExpiringSoon } from "./anthropic-credentials.js";
 
 const DEFAULT_CLAUDE_BINARY = "claude";
 const CLAUDE_COMMAND_TIMEOUT_MS = 3_000;
@@ -137,6 +139,11 @@ export interface AnthropicDiagnostics {
 export interface AnthropicProbeOptions {
   binaryPath?: string;
   requestTimeoutMs?: number;
+  anthropicDiagnosticLogging?: boolean;
+}
+
+function diagnostic(options: AnthropicProbeOptions, event: AnthropicDiagnosticEvent): void {
+  logAnthropicDiagnostic(options.anthropicDiagnosticLogging, event);
 }
 
 type ClaudeCommandResult = {
@@ -362,7 +369,7 @@ function formatCommandDisplay(parts: string[]): string {
 }
 
 function quoteWindowsCmdArg(value: string): string {
-  const escaped = value.replace(/(\\*)"/g, "$1$1\\\"").replace(/(\\+)$/g, "$1$1");
+  const escaped = value.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/g, "$1$1");
   return `"${escaped}"`;
 }
 
@@ -470,7 +477,9 @@ function getWindowResetTimeIso(window: Record<string, unknown>): string | undefi
   );
 }
 
-function parseStatusWindow(window: unknown): { percentRemaining: number; resetTimeIso?: string } | null {
+function parseStatusWindow(
+  window: unknown,
+): { percentRemaining: number; resetTimeIso?: string } | null {
   const record = asRecord(window);
   if (!record) {
     return null;
@@ -570,11 +579,7 @@ function extractClaudeCredentialsAccessToken(data: unknown): string {
     return "";
   }
 
-  for (const candidate of [
-    asRecord(root["claudeAiOauth"]),
-    asRecord(root["oauth"]),
-    root,
-  ]) {
+  for (const candidate of [asRecord(root["claudeAiOauth"]), asRecord(root["oauth"]), root]) {
     if (!candidate) {
       continue;
     }
@@ -746,9 +751,12 @@ async function readClaudeCredentialsAccessTokenFromFile(): Promise<ClaudeCredent
  * belongs to the server auth hook so TUI polling cannot rotate the same token
  * concurrently from another process.
  */
-async function readClaudeCredentialsAccessTokenFromOpencodeAuth(): Promise<ClaudeCredentialSourceResult> {
+async function readClaudeCredentialsAccessTokenFromOpencodeAuth(
+  options: AnthropicProbeOptions = {},
+): Promise<ClaudeCredentialSourceResult> {
   try {
     const stateInfo = await readAnthropicAuthState();
+    diagnostic(options, { stage: "credentials", source: "opencode", outcome: stateInfo.state });
     switch (stateInfo.state) {
       case "ok":
         return { state: "configured", accessToken: stateInfo.accessToken };
@@ -778,12 +786,20 @@ async function readClaudeCredentialsAccessTokenFromOpencodeAuth(): Promise<Claud
   }
 }
 
-async function readClaudeCredentialsAccessToken(): Promise<ClaudeCredentialsAccess> {
+async function readClaudeCredentialsAccessToken(
+  options: AnthropicProbeOptions = {},
+): Promise<ClaudeCredentialsAccess> {
   const locationsChecked: string[] = [];
   const unavailableDetails: string[] = [];
 
   // 1. macOS Keychain (no-op on non-darwin platforms)
   const keychainCredentials = await readClaudeCredentialsAccessTokenFromMacOSKeychain();
+  if (keychainCredentials)
+    diagnostic(options, {
+      stage: "credentials",
+      source: "keychain",
+      outcome: keychainCredentials.state,
+    });
   if (keychainCredentials?.state === "configured") {
     return keychainCredentials;
   }
@@ -797,7 +813,12 @@ async function readClaudeCredentialsAccessToken(): Promise<ClaudeCredentialsAcce
   // 2. OpenCode auth.json > anthropic (written by opencode-anthropic-login-via-cli).
   //    This is the most actively-maintained source on multi-plugin installs and
   //    is preferred over the legacy Claude CLI credentials file.
-  const opencodeAuthCredentials = await readClaudeCredentialsAccessTokenFromOpencodeAuth();
+  const opencodeAuthCredentials = await readClaudeCredentialsAccessTokenFromOpencodeAuth(options);
+  diagnostic(options, {
+    stage: "credentials",
+    source: "opencode",
+    outcome: opencodeAuthCredentials.state,
+  });
   if (opencodeAuthCredentials.state === "configured") {
     return opencodeAuthCredentials;
   }
@@ -810,6 +831,11 @@ async function readClaudeCredentialsAccessToken(): Promise<ClaudeCredentialsAcce
 
   // 3. ~/.claude/.credentials.json (legacy Claude CLI source)
   const fileCredentials = await readClaudeCredentialsAccessTokenFromFile();
+  diagnostic(options, {
+    stage: "credentials",
+    source: "claude-file",
+    outcome: fileCredentials.state,
+  });
   if (fileCredentials.state === "configured") {
     return fileCredentials;
   }
@@ -828,8 +854,22 @@ async function readClaudeCredentialsAccessToken(): Promise<ClaudeCredentialsAcce
 async function queryAnthropicStatusFromOAuthAccessToken(
   accessToken: string,
   requestTimeoutMs?: number,
+  options: AnthropicProbeOptions = {},
 ): Promise<AnthropicFallbackStatus> {
   let response: Response;
+  const started = Date.now();
+  const recordHttp = (
+    outcome: AnthropicDiagnosticEvent["outcome"],
+    httpStatus?: number,
+    retryAfterMs?: number,
+  ) =>
+    diagnostic(options, {
+      stage: "http",
+      outcome,
+      httpStatus,
+      retryAfterMs,
+      durationMs: Date.now() - started,
+    });
 
   try {
     response = await fetchWithTimeout(
@@ -843,6 +883,11 @@ async function queryAnthropicStatusFromOAuthAccessToken(
       requestTimeoutMs,
     );
   } catch (error) {
+    // fetchWithTimeout uses this exact error contract; do not serialize the message.
+    const timedOut =
+      error instanceof Error &&
+      (error.name === "AbortError" || /^Request timeout after \d+s$/u.test(error.message));
+    recordHttp(timedOut ? "timeout" : "network");
     return {
       state: "unavailable",
       detail: sanitizeDisplayText(error instanceof Error ? error.message : String(error)),
@@ -850,6 +895,7 @@ async function queryAnthropicStatusFromOAuthAccessToken(
   }
 
   if (response.status === 401 || response.status === 403) {
+    recordHttp(response.status === 401 ? "unauthorized" : "forbidden", response.status);
     invalidateAuthFileCache();
     let freshAccessToken: string | null = null;
     let freshExpires: number | null = null;
@@ -871,12 +917,15 @@ async function queryAnthropicStatusFromOAuthAccessToken(
     }
 
     if (freshAccessToken && (freshExpires === null || Date.now() < freshExpires)) {
+      diagnostic(options, { stage: "rotated-token", outcome: "rotated", source: "opencode" });
       return {
         state: "auth-stale",
         detail: `Anthropic API error ${response.status}: token rotated, retrying with fresh token.`,
         freshAccessToken,
       };
     }
+
+    diagnostic(options, { stage: "rotated-token", outcome: "unchanged", source: "opencode" });
 
     let detail = "";
     try {
@@ -904,6 +953,7 @@ async function queryAnthropicStatusFromOAuthAccessToken(
       const retryAfterMs =
         parseAnthropicRetryAfterMs(response.headers?.get("retry-after")) ??
         DEFAULT_ANTHROPIC_RATE_LIMIT_BACKOFF_MS;
+      recordHttp("rate-limited", response.status, retryAfterMs);
       const retryUntilIso = new Date(Date.now() + retryAfterMs).toLocaleTimeString();
       return {
         state: "rate-limited",
@@ -911,6 +961,8 @@ async function queryAnthropicStatusFromOAuthAccessToken(
         rateLimitedUntil: Date.now() + retryAfterMs,
       };
     }
+
+    recordHttp(response.status >= 500 ? "server-error" : "http-error", response.status);
 
     return {
       state: "unavailable",
@@ -922,6 +974,7 @@ async function queryAnthropicStatusFromOAuthAccessToken(
   try {
     data = await response.json();
   } catch {
+    recordHttp("parse-error", response.status);
     return {
       state: "unavailable",
       detail: "Failed to parse Anthropic status response",
@@ -930,12 +983,14 @@ async function queryAnthropicStatusFromOAuthAccessToken(
 
   const status = parseUsageResponse(data);
   if (!status) {
+    recordHttp("response-shape", response.status);
     return {
       state: "unavailable",
       detail: "Unexpected Anthropic status response shape",
     };
   }
 
+  recordHttp("success", response.status);
   return {
     state: "success",
     status,
@@ -945,13 +1000,20 @@ async function queryAnthropicStatusFromOAuthAccessToken(
 async function queryAnthropicUsageEndpointWithRefresh(
   accessToken: string,
   requestTimeoutMs?: number,
+  options: AnthropicProbeOptions = {},
 ): Promise<AnthropicFallbackStatus> {
-  const first = await queryAnthropicStatusFromOAuthAccessToken(accessToken, requestTimeoutMs);
+  const first = await queryAnthropicStatusFromOAuthAccessToken(
+    accessToken,
+    requestTimeoutMs,
+    options,
+  );
   if (first.state === "auth-stale") {
     const second = await queryAnthropicStatusFromOAuthAccessToken(
       first.freshAccessToken,
       requestTimeoutMs,
+      options,
     );
+    diagnostic(options, { stage: "rotated-token", outcome: second.state });
     if (second.state !== "auth-stale") {
       return second;
     }
@@ -1107,8 +1169,7 @@ function parseClaudeAuthStatusResult(result: ClaudeCommandResult): ParsedAuthPro
     return {
       authStatus: "unknown",
       unsupportedCommand: true,
-      message:
-        "Claude CLI authentication status JSON is unavailable in this version of Claude.",
+      message: "Claude CLI authentication status JSON is unavailable in this version of Claude.",
     };
   }
 
@@ -1211,6 +1272,12 @@ async function probeAnthropicLocalDiagnostics(
   checkedCommands.push(versionCommand.display);
   const versionResult = await runClaudeCommand(versionCommand);
   if (isCommandMissing(versionResult)) {
+    diagnostic(options, {
+      stage: "local-cli",
+      source: "local-cli",
+      outcome: "not-found",
+      hasData: false,
+    });
     return {
       installed: false,
       version: null,
@@ -1219,6 +1286,9 @@ async function probeAnthropicLocalDiagnostics(
       message: `Claude CLI (\`${sanitizeDisplayText(binaryPath)}\`) is not installed or not on PATH.`,
     };
   }
+
+  if (versionResult.timedOut)
+    diagnostic(options, { stage: "local-cli", source: "local-cli", outcome: "timeout" });
 
   const version = parseVersion(`${versionResult.stdout}\n${versionResult.stderr}`);
 
@@ -1229,13 +1299,20 @@ async function probeAnthropicLocalDiagnostics(
   ]);
   checkedCommands.push(authStatusJsonCommand.display);
   const authJsonResult = await runClaudeCommand(authStatusJsonCommand);
+  if (authJsonResult.timedOut)
+    diagnostic(options, { stage: "local-cli", source: "local-cli", outcome: "timeout" });
   let parsedAuth = parseClaudeAuthStatusResult(authJsonResult);
 
   if (parsedAuth.unsupportedCommand) {
     const authStatusCommand = buildClaudeCommandInvocation(binaryPath, ["auth", "status"]);
     checkedCommands.push(authStatusCommand.display);
-    parsedAuth = parseClaudeAuthStatusResult(await runClaudeCommand(authStatusCommand));
+    const authResult = await runClaudeCommand(authStatusCommand);
+    if (authResult.timedOut)
+      diagnostic(options, { stage: "local-cli", source: "local-cli", outcome: "timeout" });
+    parsedAuth = parseClaudeAuthStatusResult(authResult);
   }
+
+  diagnostic(options, { stage: "local-cli", source: "local-cli", outcome: parsedAuth.authStatus });
 
   if (parsedAuth.authStatus !== "authenticated") {
     return {
@@ -1248,6 +1325,12 @@ async function probeAnthropicLocalDiagnostics(
   }
 
   const status = parsedAuth.jsonPayload ? parseUsageResponse(parsedAuth.jsonPayload) : null;
+  diagnostic(options, {
+    stage: "local-cli",
+    source: "local-cli",
+    outcome: status ? "success" : "unavailable",
+    hasData: Boolean(status),
+  });
   if (status) {
     return {
       installed: true,
@@ -1287,14 +1370,22 @@ async function getCachedAnthropicLocalDiagnostics(
     cached.timestamp > 0 &&
     now - cached.timestamp < ANTHROPIC_DIAGNOSTICS_TTL_MS
   ) {
+    diagnostic(options, {
+      stage: "local-cache",
+      outcome: "hit",
+      remainingTtlMs: ANTHROPIC_DIAGNOSTICS_TTL_MS - (now - cached.timestamp),
+      hasData: Boolean(cached.value.localStatus),
+    });
     return cached.value;
   }
 
   if (cached.inFlight) {
+    diagnostic(options, { stage: "local-cache", outcome: "dedup" });
     return cached.inFlight;
   }
 
-  const inFlight = probeAnthropicLocalDiagnostics({ binaryPath }).then((value) => {
+  diagnostic(options, { stage: "local-cache", outcome: cached.value ? "expiry" : "miss" });
+  const inFlight = probeAnthropicLocalDiagnostics({ ...options, binaryPath }).then((value) => {
     localDiagnosticsCache.set(binaryPath, {
       timestamp: Date.now(),
       value,
@@ -1336,20 +1427,33 @@ export async function getAnthropicDiagnostics(
     cached.timestamp > 0 &&
     now - cached.timestamp < ANTHROPIC_DIAGNOSTICS_TTL_MS
   ) {
+    diagnostic(options, {
+      stage: "diagnostics-cache",
+      outcome: "hit",
+      remainingTtlMs: ANTHROPIC_DIAGNOSTICS_TTL_MS - (now - cached.timestamp),
+      hasData: Boolean(cached.value.status),
+    });
     return cached.value;
   }
 
   if (cached.inFlight) {
+    diagnostic(options, { stage: "diagnostics-cache", outcome: "dedup" });
     return cached.inFlight;
   }
 
+  diagnostic(options, { stage: "diagnostics-cache", outcome: cached.value ? "expiry" : "miss" });
   const inFlight = (async () => {
-    const localDiagnostics = await getCachedAnthropicLocalDiagnostics({ binaryPath });
+    const localDiagnostics = await getCachedAnthropicLocalDiagnostics({ ...options, binaryPath });
     if (localDiagnostics.localStatus) {
       return mapLocalDiagnosticsToAnthropicDiagnostics(localDiagnostics);
     }
 
     const opencodeAuthState = await readAnthropicAuthState();
+    diagnostic(options, {
+      stage: "credentials",
+      source: "opencode",
+      outcome: opencodeAuthState.state,
+    });
     if (
       opencodeAuthState.state === "auth-expired" ||
       opencodeAuthState.state === "auth-refreshing"
@@ -1367,8 +1471,9 @@ export async function getAnthropicDiagnostics(
       return diagnostics;
     }
 
-    const credentials = await readClaudeCredentialsAccessToken();
+    const credentials = await readClaudeCredentialsAccessToken(options);
     if (credentials.state !== "configured") {
+      diagnostic(options, { stage: "credentials", outcome: "credential-unavailable" });
       if (localDiagnostics.authStatus !== "authenticated") {
         return mapLocalDiagnosticsToAnthropicDiagnostics(localDiagnostics);
       }
@@ -1388,6 +1493,7 @@ export async function getAnthropicDiagnostics(
     const fallbackStatus = await queryAnthropicUsageEndpointWithRefresh(
       credentials.accessToken,
       options.requestTimeoutMs,
+      options,
     );
     if (fallbackStatus.state === "rate-limited") {
       const diagnostics: AnthropicDiagnostics = {
@@ -1480,6 +1586,7 @@ export async function hasAnthropicCredentialsConfigured(
   //
   try {
     const authState = await readAnthropicAuthState();
+    diagnostic(options, { stage: "availability", source: "opencode", outcome: authState.state });
     if (authState.state !== "no-auth" && authState.state !== "no-access-token") {
       return true;
     }
@@ -1501,8 +1608,34 @@ export async function hasAnthropicCredentialsConfigured(
 export async function queryAnthropicStatus(
   options: AnthropicProbeOptions = {},
 ): Promise<AnthropicResult> {
+  const started = Date.now();
   try {
     const diagnostics = await getAnthropicDiagnostics(options);
+    diagnostic(options, {
+      stage: "query",
+      outcome: diagnostics.statusSupported
+        ? "success"
+        : diagnostics.statusSource === "rate-limited"
+          ? "rate-limited"
+          : diagnostics.statusSource === "auth-expired"
+            ? "auth-expired"
+            : diagnostics.authStatus === "authenticated" && diagnostics.message
+              ? "error"
+              : "unavailable",
+      attempted: Boolean(
+        diagnostics.statusSupported
+          ? diagnostics.status
+          : diagnostics.statusSource === "rate-limited" ||
+              diagnostics.statusSource === "auth-expired" ||
+              (diagnostics.authStatus === "authenticated" && diagnostics.message),
+      ),
+      hasData: Boolean(diagnostics.status),
+      durationMs: Date.now() - started,
+      retryAfterMs: Math.max(
+        0,
+        (diagnostics.rateLimitedUntil ?? diagnostics.authExpiredUntil ?? Date.now()) - Date.now(),
+      ),
+    });
     if (diagnostics.statusSupported) {
       return diagnostics.status ?? null;
     }
@@ -1518,7 +1651,10 @@ export async function queryAnthropicStatus(
       };
     }
 
-    if (diagnostics.statusSource === "auth-expired" && typeof diagnostics.authExpiredUntil === "number") {
+    if (
+      diagnostics.statusSource === "auth-expired" &&
+      typeof diagnostics.authExpiredUntil === "number"
+    ) {
       return {
         success: false,
         error: diagnostics.message ?? "Anthropic OAuth token expired",
@@ -1535,6 +1671,13 @@ export async function queryAnthropicStatus(
 
     return null;
   } catch (err) {
+    diagnostic(options, {
+      stage: "query",
+      outcome: "error",
+      attempted: true,
+      hasData: false,
+      durationMs: Date.now() - started,
+    });
     return {
       success: false,
       error: `Claude CLI probe failed: ${sanitizeDisplayText(

@@ -23,6 +23,7 @@ export const anthropicProvider: StatusProvider = {
   async isAvailable(ctx: StatusProviderContext): Promise<boolean> {
     return await hasAnthropicCredentialsConfigured({
       binaryPath: ctx.config?.anthropicBinaryPath,
+      anthropicDiagnosticLogging: ctx.config?.anthropicDiagnosticLogging,
     });
   },
 
@@ -34,6 +35,7 @@ export const anthropicProvider: StatusProvider = {
     const result = await queryAnthropicStatus({
       binaryPath: ctx.config?.anthropicBinaryPath,
       requestTimeoutMs: ctx.config?.requestTimeoutMs,
+      anthropicDiagnosticLogging: ctx.config?.anthropicDiagnosticLogging,
     });
 
     if (!result) {
@@ -45,7 +47,9 @@ export const anthropicProvider: StatusProvider = {
       // will keep trying to refresh in the background — surface it as a
       // transient/self-healing state rather than a hard failure.
       const isAuthExpired = typeof result.authExpiredUntil === "number";
-      const errorResult = attemptedErrorResult("Claude", result.error, { retryable: isAuthExpired });
+      const errorResult = attemptedErrorResult("Claude", result.error, {
+        retryable: isAuthExpired,
+      });
       if (typeof result.rateLimitedUntil === "number") {
         return { ...errorResult, rateLimitedUntil: result.rateLimitedUntil };
       }
